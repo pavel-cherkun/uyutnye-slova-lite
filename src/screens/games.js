@@ -2,7 +2,7 @@
 // Три в ряд играет вещами (цели сгорают) и возвращает буквы. Следующий шаг подсвечен.
 
 import { h, toast } from '../ui/common.js';
-import { state, totalLetters } from '../state.js';
+import { state, totalLetters, totalWords } from '../state.js';
 import { getItem } from '../data/items.js';
 
 const tier1Kinds = () => Object.keys(state.items).filter((id) => state.items[id] > 0 && getItem(id).tier === 1).length;
@@ -21,7 +21,7 @@ export const GAMES = [
   {
     id: 'match3', title: 'Три в ряд', emoji: '🍬', flow: '🎁 → L',
     need: () => (tier1Kinds() >= 3 ? null : `Нужно 3 разные вещи — собери слова в Эрудите (${tier1Kinds()}/3)`),
-    tip: 'Фишки — твои вещи. Вещи-цели сгорают, за победу — буквы и шанс на редкую вещь.',
+    tip: 'Фишки — твои вещи. Собери цели — они сгорят, а взамен придёт редкая вещь-сюрприз и буквы.',
   },
 ];
 
@@ -52,10 +52,10 @@ export function renderGames(root, nav) {
       h('div.gm-core-t', h('b', 'Слова'), h('i', 'становятся вещами')),
       row(GAMES[0], 'Сбивай блоки — добывай буквы'),
       mid((sampleL.length ? sampleL : ['А', 'О', 'К']).map((ch) => h('span.ltr', ch)), `${letters} ${plural(letters, 'буква', 'буквы', 'букв')}`),
-      row(GAMES[1], 'Собери из букв слово — получишь вещь'),
-      mid(sampleI.length ? sampleI.map((e) => h('span.gm-core-em', e)) : [h('span.gm-core-em', '🎁')], `${kinds} ${plural(kinds, 'вещь', 'вещи', 'вещей')}`),
+      row(GAMES[1], 'Собери слово — получи вещь-картинку'),
+      mid(sampleI.length ? sampleI.map((e) => h('span.gm-core-em', e)) : [h('span.gm-core-em', '🎁')], `${kinds} ${plural(kinds, 'вещь', 'вещи', 'вещей')}` + (totalWords() ? ` · 📖 ${totalWords()} ${plural(totalWords(), 'слово', 'слова', 'слов')}` : '')),
       row(GAMES[2], `Уровень ${Math.min(lvl, M3_MAX)} из ${M3_MAX} · вещи — фишки`),
-      h('div.gm-core-mid', h('span.gm-core-arr', '↺'), h('span.gm-core-n', 'победа приносит новые буквы')),
+      h('div.gm-core-mid', h('span.gm-core-arr', '↺'), h('span.gm-core-n', 'победа: редкая вещь-сюрприз и новые буквы')),
     ),
   ));
 }

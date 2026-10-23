@@ -32,10 +32,15 @@ export function itemsModal() {
       const it = getItem(id);
       return h('div.inv-i', { style: { '--rar': RARITY[it.rarity].color } }, h('span.inv-e', it.emoji), h('span.inv-w', it.word.toLowerCase()), h('b', '×' + state.items[id]));
     }))));
+  // слова без своего эмодзи — в «Словаре»
+  const words = Object.keys(state.items).filter((id) => id.startsWith('card:') && state.items[id] > 0).map((id) => getItem(id))
+    .sort((a, b) => b.word.length - a.word.length || a.word.localeCompare(b.word));
   m = modal([
     h('div.modal-title', 'Мои вещи'),
     h('div.inv-sub', ids.length ? 'Вещи делаются из слов в Эрудите и становятся фишками в Три в ряд.' : 'Пока пусто — собери слово в Эрудите.'),
     h('div.inv-list', ...groups),
+    words.length ? h('div.inv-g', h('div.inv-gh', `📖 Словарь · ${words.length}`), h('div.inv-sub', 'Слова без своей картинки'),
+      h('div.inv-words', ...words.map((it) => h('span.inv-word.rar-' + it.rarity, { style: { '--rar': RARITY[it.rarity].color } }, it.word.toLowerCase())))) : null,
     h('button.btn', { onclick: () => m.close() }, 'Готово'),
   ]);
   m.el.classList.add('inv-box');
@@ -57,6 +62,8 @@ const CSS = `
   box-shadow: inset 0 0 0 2px var(--rar); }
 .inv-e { font-size: 28px; line-height: 1.1; }
 .inv-w { font-size: 10px; font-weight: 800; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inv-words { display: flex; flex-wrap: wrap; gap: 6px; }
+.inv-word { background: #fff; border-radius: 99px; padding: 5px 11px; font-weight: 800; font-size: 13px; box-shadow: inset 0 0 0 2px var(--rar); }
 .inv-i b { position: absolute; top: -4px; right: -2px; background: #111; color: #fff; border-radius: 99px; font-size: 10px; padding: 1px 5px; }
 `;
 document.head.append(Object.assign(document.createElement('style'), { textContent: CSS }));

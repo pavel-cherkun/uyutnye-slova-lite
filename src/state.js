@@ -112,7 +112,9 @@ export function importSave(code) {
 // ---------- Предметы ----------
 export function itemCount(id) { return state.items[id] || 0; }
 /** Сколько вещей всего (для шапки) */
-export function totalItems() { return Object.values(state.items).reduce((a, b) => a + b, 0); }
+export function totalItems() { return Object.entries(state.items).reduce((a, [id, n]) => a + (id.includes(':') ? 0 : n), 0); }
+/** Сколько слов в «Словаре» (слова без своего эмодзи) */
+export function totalWords() { return Object.keys(state.items).filter((id) => id.startsWith('card:') && state.items[id] > 0).length; }
 
 // Новые для коллекции предметы из последних поступлений (для бейджа «НОВОЕ!» в окне наград)
 export let lastNew = [];

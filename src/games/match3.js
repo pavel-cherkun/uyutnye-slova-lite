@@ -71,19 +71,20 @@ export function levelConfig(level) {
   };
 }
 
-/** Награда за победу: буквы (больше на поздних уровнях и у боссов) и шанс редкой вещи */
-export function levelReward(level) {
+/**
+ * Награда за победу: редкая вещь-сюрприз (по возможности — которой ещё не было), у босса — эпик или легенда,
+ * плюс буквы, чтобы круг продолжался. owned — id уже найденных вещей.
+ */
+export function levelReward(level, owned = {}) {
   const boss = isBoss(level);
   let letters = '';
-  for (let i = 0; i < 5 + Math.floor(level / 8) + (boss ? 4 : 0); i++) letters += randomLetter();
-  const reward = { letters };
+  for (let i = 0; i < 3 + Math.floor(level / 10) + (boss ? 3 : 0); i++) letters += randomLetter();
   const roll = Math.random();
-  const rar = boss ? 'e' : roll < 0.06 ? 'e' : roll < 0.28 ? 'r' : null;
-  if (rar) {
-    const pool = ITEMS.filter((it) => it.rarity === rar);
-    reward.items = { [pool[Math.floor(Math.random() * pool.length)].id]: 1 };
-  }
-  return reward;
+  const rar = boss ? (roll < 0.25 ? 'l' : 'e') : roll < 0.12 ? 'e' : 'r';
+  const all = ITEMS.filter((it) => it.rarity === rar);
+  const fresh = all.filter((it) => !owned[it.id]);
+  const pool = fresh.length ? fresh : all;
+  return { letters, items: { [pool[Math.floor(Math.random() * pool.length)].id]: 1 } };
 }
 
 const key = (r, c) => r * 100 + c;
@@ -1274,7 +1275,9 @@ function playLevel(root, ctx, chosen) {
     updateMoves();
     store.state.progress.match3Level = level + 1;
     store.commit();
-    const reward = levelReward(level);
+    // цели собраны — эти вещи сгорают (по одной), взамен — редкая вещь-сюрприз
+    for (const g of goals) { const id = items[g.type].id; if (id) store.removeItem(id, 1); }
+    const reward = levelReward(level, store.state.dex || {});
     buzz([30, 50, 30, 50, 60]);
     sfx('reward');
     const rect = boardEl.getBoundingClientRect();
@@ -1549,7 +1552,7 @@ export function mount(root, ctx) {
       return h('div.m3p-slot' + (id ? '.on' : ''), { style: { '--c': COLORS[i][0] } }, id ? getItem(id).emoji : '');
     }));
     const burn = picked.length >= MIN_PICK ? goalIds() : [];
-    burnEl.replaceChildren(...(burn.length ? [h('span', '🔥 Цели сгорят:'), ...burn.map((id) => h('span.m3p-be', getItem(id).emoji)), h('span.m3p-bs', 'за победу — буквы')] : []));
+    burnEl.replaceChildren(...(burn.length ? [h('span', '🎯 Цели:'), ...burn.map((id) => h('span.m3p-be', getItem(id).emoji)), h('span.m3p-bs', 'собери — они сгорят, а взамен придёт редкая вещь 🎁')] : []));
     gridEl.replaceChildren(...cands.map(({ it, n }) => {
       const on = picked.includes(it.id);
       return h('button.m3p-it' + (on ? '.on' : ''), {
@@ -1568,9 +1571,6 @@ export function mount(root, ctx) {
 
   function start() {
     const chosen = picked.map((id) => getItem(id));
-    // ставка: по одной вещи каждой цели сгорает при старте
-    for (const id of goalIds()) store.removeItem(id, 1);
-    store.commit();
     sfx('coin'); buzz(12);
     root.classList.remove('m3p-root');
     root.replaceChildren();

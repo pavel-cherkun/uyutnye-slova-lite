@@ -266,8 +266,8 @@ export function mount(root, ctx) {
         // что получится: само слово-вещь или вещь из его категории
         const it = getItem(wordToItem(w));
         rar = it.rarity;
-        const label = TOOL_USE[it.id] ? '🔨 бустер' : it.word.toLowerCase();
-        previewEl.append(h('span', `${it.emoji} ${label}`), h('span.rar-tag.rar-' + it.rarity, RARITY[it.rarity].name));
+        if (it.tier === 1) previewEl.append(h('span', `${it.emoji} ${TOOL_USE[it.id] ? 'бустер' : 'вещь'}`), h('span.rar-tag.rar-' + it.rarity, RARITY[it.rarity].name));
+        else previewEl.append(h('span', '📖 в словарь'));
       }
     }
     boardEl.classList.remove('rar-c', 'rar-r', 'rar-e', 'rar-l');
@@ -365,7 +365,7 @@ export function mount(root, ctx) {
 
     const gotId = wordToItem(w);
     store.addItem(gotId);
-    emoji = getItem(gotId).emoji;
+    emoji = getItem(gotId).tier === 1 ? getItem(gotId).emoji : '📖';
     if (c.kind === 'item') confetti(innerWidth / 2, innerHeight / 3, 30);
     const rar = getItem(gotId).rarity;
     made.unshift({ word: w, emoji, rar });
@@ -378,7 +378,7 @@ export function mount(root, ctx) {
       document.body.append(flash); later(() => flash.remove(), 1600);
       confetti(innerWidth / 2, innerHeight / 3, rar === 'l' ? 90 : 50);
     }
-    floatText(`${emoji} ${getItem(gotId).word.toLowerCase()}`, innerWidth / 2, innerHeight * 0.35);
+    floatText(getItem(gotId).tier === 1 ? `${emoji} ${getItem(gotId).word.toLowerCase()}` : '📖 в словарь', innerWidth / 2, innerHeight * 0.35);
     word = [];
     topRank = -1; lastLen = 0;
     store.commit();
