@@ -21,6 +21,8 @@ export function lettersModal() {
   m.el.classList.add('inv-box');
 }
 
+const stars = (w) => (state.progress.wordStars && state.progress.wordStars[w]) || 0;
+
 export function itemsModal() {
   let m;
   const ids = Object.keys(state.items).filter((id) => state.items[id] > 0 && getItem(id).tier === 1);
@@ -39,8 +41,8 @@ export function itemsModal() {
     h('div.modal-title', 'Мои вещи'),
     h('div.inv-sub', ids.length ? 'Вещи делаются из слов в Эрудите и становятся фишками в Три в ряд.' : 'Пока пусто — собери слово в Эрудите.'),
     h('div.inv-list', ...groups),
-    words.length ? h('div.inv-g', h('div.inv-gh', `📖 Словарь · ${words.length}`), h('div.inv-sub', 'Слова без своей картинки'),
-      h('div.inv-words', ...words.map((it) => h('span.inv-word.rar-' + it.rarity, { style: { '--rar': RARITY[it.rarity].color } }, it.word.toLowerCase())))) : null,
+    words.length ? h('div.inv-g', h('div.inv-gh', `📖 Словарь · ${words.length}`), h('div.inv-sub', 'Слова без своей картинки. Собери слово в Блоках — оно получит звезду ★'),
+      h('div.inv-words', ...words.map((it) => h('span.inv-word.rar-' + it.rarity, { style: { '--rar': RARITY[it.rarity].color } }, it.word.toLowerCase() + (stars(it.word) ? ' ' + '★'.repeat(stars(it.word)) : ''))))) : null,
     h('button.btn', { onclick: () => m.close() }, 'Готово'),
   ]);
   m.el.classList.add('inv-box');

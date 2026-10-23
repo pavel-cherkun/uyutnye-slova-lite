@@ -1,6 +1,7 @@
 // Мини-игра «Блоки» — стрелялка в стиле Ballz. Бесплатная, главный источник букв.
 
 import { randomLetter } from '../data/letters.js';
+import { ITEMS } from '../data/items.js';
 import { h, modal, shuffle, confetti } from '../ui/common.js';
 import { sfx, buzz } from '../ui/device.js';
 
@@ -25,6 +26,18 @@ const LAUNCH_GAP = 0.075;    // сек между шариками в очере
 const MAX_ANGLE = 1.36;      // ~78° от вертикали
 const LETTER_CHANCE = 0.6;
 const RECALL_AFTER = 8;      // сек
+const MAX_STARS = 3;         // слово-цель можно «вырастить» до ★★★
+
+// Сколько звёзд у слова из Словаря (растут, когда слово собрано в Блоках)
+export const wordStars = (st, word) => (st.progress.wordStars && st.progress.wordStars[word]) || 0;
+
+// Вещь из сейфа или за собранное слово: чем больше звёзд, тем реже вещь; новые — в приоритете
+function pickItem(rar, owned) {
+  const all = ITEMS.filter((it) => it.rarity === rar);
+  const fresh = all.filter((it) => !owned[it.id]);
+  const pool = fresh.length ? fresh : all;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
 
 const CSS = `
 .sh-root { position:absolute; inset:0; display:flex; flex-direction:column; color:var(--ink);
@@ -94,6 +107,22 @@ const CSS = `
 .sh-record { align-self:center; font-family:var(--display); font-weight:900; font-size:14px; background:var(--pink); color:#fff;
   border:2.5px solid var(--ink); border-radius:99px; padding:4px 12px; box-shadow:0 3px 0 var(--ink); transform:rotate(-3deg); }
 .sh-take { font-family:var(--display); text-transform:uppercase; }
+.sh-target { display:flex; align-items:center; gap:6px; padding:0 10px 6px; flex:none; }
+.sh-target-l { font-size:10px; font-weight:900; text-transform:uppercase; opacity:.55; white-space:nowrap; }
+.sh-slots { display:flex; gap:3px; flex-wrap:wrap; }
+.sh-slot { width:22px; height:26px; display:inline-flex; align-items:center; justify-content:center; border:2px dashed rgba(17,17,17,.35);
+  border-radius:7px; font-family:var(--display); font-weight:900; font-size:12px; color:rgba(17,17,17,.35); background:#fff; }
+.sh-slot.on { border:2px solid var(--ink); background:#ffc400; color:var(--ink); box-shadow:0 2px 0 var(--ink); animation: sh-pop .4s cubic-bezier(.3,1.8,.6,1); }
+.sh-target.done .sh-slot { background:var(--lime); }
+.sh-stars { font-size:12px; letter-spacing:-1px; white-space:nowrap; }
+.sh-pick { display:flex; flex-direction:column; gap:7px; max-height:46vh; overflow-y:auto; padding:2px; }
+.sh-pick-w { display:flex; align-items:center; gap:8px; background:#fff; border:2.5px solid var(--ink); border-radius:16px; padding:8px 12px;
+  box-shadow:0 3px 0 var(--ink); font-family:var(--display); font-weight:900; font-size:15px; text-align:left; color:var(--ink); }
+.sh-pick-w:active { transform:translateY(2px); box-shadow:0 1px 0 var(--ink); }
+.sh-pick-w span { flex:1; text-transform:uppercase; letter-spacing:-.3px; }
+.sh-pick-w small { font-family:var(--font, inherit); font-size:11px; font-weight:800; opacity:.6; white-space:nowrap; }
+.sh-sub { font-size:13px; font-weight:700; color:var(--ink-soft); }
+.sh-gain { display:flex; gap:6px; justify-content:center; flex-wrap:wrap; font-size:30px; }
 `;
 
 // ---------- Утилиты ----------
@@ -155,6 +184,9 @@ export function mount(root, ctx) {
     recordShown: false,
   };
   const collected = [];   // буквы сессии
+  const gotItems = {};    // вещи сессии (сейфы и собранное слово)
+  // слово-цель из Словаря: его буквы прячутся в золотых блоках
+  const T = { word: null, found: [], done: false, stars: 0, sinceGold: 0 };
   let arrived = 0;        // сколько букв «долетело» до счётчика
   const best0 = (ctx.store.state.stats && ctx.store.state.stats.shooterBest) || 0;
 
@@ -164,6 +196,7 @@ export function mount(root, ctx) {
   const letterNum = h('b', '0');
   const letterPill = h('div.sh-pill', h('span.ltr', 'А'), letterNum);
   const strip = h('div.sh-strip', h('span.sh-strip-empty', 'Сбивай блоки с буквами — они попадут сюда'));
+  const targetEl = h('div.sh-target', { style: { display: 'none' } });
   const canvas = h('canvas');
   const speedBtn = h('button.sh-btn.sh-hide', { onclick: onSpeed }, '⏩ x1');
   const recallBtn = h('button.sh-btn.sh-orange.sh-hide', { onclick: onRecall }, '⤵ Вернуть');
@@ -179,6 +212,7 @@ export function mount(root, ctx) {
       turnPill,
       letterPill,
     ),
+    targetEl,
     strip,
     wrap,
   );
@@ -211,14 +245,28 @@ export function mount(root, ctx) {
     const nBlocks = clamp(rint(2, 4) + Math.floor(turn / 8), 2, 6);
     const blockCols = cols.slice(0, nBlocks);
     const free = cols.slice(nBlocks);
+    const row = [];
     for (const c of blockCols) {
       let hp = turn;
       if (turn >= 3 && Math.random() < 0.25) hp = turn * 2;
-      S.blocks.push({
+      const b = {
         c, r: 0, y: -1, hp, max: hp,
         letter: Math.random() < LETTER_CHANCE ? randomLetter() : null,
         flash: 0, shake: 0, dead: false,
-      });
+      };
+      // особые блоки: лёд (первый удар только колет корку), бомба (взрыв 3×3, цепочкой), сейф (крепкий, внутри вещь)
+      const x = Math.random();
+      if (turn >= 8 && x < 0.04 && !S.blocks.some((o) => o.safe && !o.dead)) { b.safe = true; b.letter = null; b.hp = b.max = turn * 3; }
+      else if (turn >= 6 && x < 0.11) b.bomb = true;
+      else if (turn >= 4 && x < 0.24) b.ice = true;
+      S.blocks.push(b);
+      row.push(b);
+    }
+    // золотой блок с буквой слова-цели — примерно через ряд, не больше двух на поле
+    T.sinceGold++;
+    if (T.word && !T.done && (T.sinceGold >= 2 || Math.random() < 0.45)) {
+      const b = row.find((o) => !o.safe);
+      if (b) makeGold(b);
     }
     // «+1» есть всегда, если есть свободная клетка
     if (free.length) S.bonuses.push({ c: free[0], r: 0, y: -1, kind: 'plus', dead: false, t: Math.random() * 6 });
@@ -229,6 +277,62 @@ export function mount(root, ctx) {
       else if (x < 0.26) kind = 'coin'; // 🎁 — пара бонусных букв
       if (kind) S.bonuses.push({ c, r: 0, y: -1, kind, dead: false, t: Math.random() * 6 });
     }
+  }
+
+  // буквы цели, которых ещё нет ни в слотах, ни в золотых блоках на поле
+  function neededLetters() {
+    const need = [...T.word].filter((_, i) => !T.found[i]);
+    for (const b of S.blocks) if (b.gold && !b.dead) { const i = need.indexOf(b.letter); if (i >= 0) need.splice(i, 1); }
+    return need;
+  }
+  function makeGold(b) {
+    if (S.blocks.filter((o) => o.gold && !o.dead).length >= 2) return;
+    const need = neededLetters();
+    if (!need.length) return;
+    b.gold = true;
+    b.bomb = false;
+    b.letter = need[Math.floor(Math.random() * need.length)];
+    T.sinceGold = 0;
+  }
+
+  function renderTarget() {
+    if (!T.word) { targetEl.style.display = 'none'; return; }
+    targetEl.style.display = '';
+    targetEl.classList.toggle('done', T.done);
+    const stars = T.stars + (T.done ? 1 : 0);
+    targetEl.replaceChildren(
+      h('span.sh-target-l', T.done ? 'собрано' : 'слово'),
+      h('div.sh-slots', [...T.word].map((ch, i) => h('span.sh-slot' + (T.found[i] ? '.on' : ''), ch))),
+      h('span.sh-stars', '★'.repeat(stars) + '☆'.repeat(MAX_STARS - stars)),
+    );
+  }
+
+  function onGold(ch) {
+    const i = [...T.word].findIndex((x, j) => x === ch && !T.found[j]);
+    if (i < 0 || T.done) return;
+    T.found[i] = true;
+    if (T.found.every(Boolean)) wordComplete();
+    renderTarget();
+  }
+
+  // слово собрано: его буквы возвращаются вдвое, вещь-сюрприз и звезда в Словаре
+  function wordComplete() {
+    T.done = true;
+    const st = ctx.store.state;
+    (st.progress.wordStars ||= {})[T.word] = T.stars + 1;
+    const roll = Math.random();
+    const rar = T.stars >= 2 ? (roll < 0.15 ? 'l' : 'e') : T.stars === 1 ? (roll < 0.4 ? 'e' : 'r') : 'r';
+    const it = pickItem(rar, { ...st.dex, ...gotItems });
+    gotItems[it.id] = (gotItems[it.id] || 0) + 1;
+    ctx.store.commit();
+    showBanner('СЛОВО СОБРАНО!');
+    const p = { x: COLS / 2, y: ROWS / 2 };
+    [...T.word, ...T.word].forEach((ch, k) => setTimeout(() => {
+      if (S.finished) return;
+      collected.push(ch);
+      flyLetter(ch, p.x + rnd(-1.5, 1.5), p.y + rnd(-1, 1));
+    }, 300 + k * 70));
+    setTimeout(() => !S.finished && floatText(`${it.emoji} ${it.word.toLowerCase()}`, p.x, p.y + 1), 500);
   }
 
   spawnRow(1);
@@ -308,6 +412,16 @@ export function mount(root, ctx) {
 
   function hitBlock(b, dmg = 1) {
     if (b.dead) return;
+    if (b.ice) { // первый удар колет лёд
+      b.ice = false;
+      b.flash = 1; b.shake = 1;
+      for (let i = 0; i < 12; i++) {
+        const a = Math.random() * Math.PI * 2, sp = rnd(2, 6);
+        S.particles.push({ x: b.c + 0.5, y: b.r + 0.5, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 2, life: 0.5, max: 0.5, size: rnd(0.06, 0.12), color: i % 3 ? '#bfe9ff' : '#ffffff' });
+      }
+      snd('tap', 60);
+      return;
+    }
     b.hp -= dmg;
     b.flash = 1;
     b.shake = 1;
@@ -337,7 +451,15 @@ export function mount(root, ctx) {
       collected.push(b.letter);
       flyLetter(b.letter, cx, cy);
     }
+    if (b.gold) onGold(b.letter);
+    if (b.safe) {
+      const it = pickItem(Math.random() < 0.3 ? 'r' : 'c', { ...ctx.store.state.dex, ...gotItems });
+      gotItems[it.id] = (gotItems[it.id] || 0) + 1;
+      floatText(`${it.emoji} ${it.word.toLowerCase()}`, cx, cy);
+      sfx('reward');
+    }
     if (S.phase === 'fly') addCombo();
+    if (b.bomb) { floatText('БУМ!', cx, cy); explode(b.c, b.r); } // соседние бомбы взорвутся цепочкой
   }
 
   // --- Комбо за выстрел ---
@@ -826,7 +948,7 @@ export function mount(root, ctx) {
     // блоки
     for (const b of S.blocks) {
       if (b.dead) continue;
-      const col = blockColor(b.hp, S.turn);
+      const col = b.gold ? '#ffc400' : b.safe ? '#2f3a52' : blockColor(b.hp, S.turn);
       const jx = b.shake > 0 ? rnd(-1, 1) * b.shake * 2.5 : 0;
       const jy = b.shake > 0 ? rnd(-1, 1) * b.shake * 2.5 : 0;
       const pop = 1 + b.shake * 0.07;
@@ -836,6 +958,11 @@ export function mount(root, ctx) {
       const y = (b.y + 0.5) * s - bw / 2 + jy - 1;
       const rr = s * 0.2;
       const press = b.flash * 2; // при ударе блок «вдавливается» в тень
+      if (b.gold) { // пульсирующее свечение — золото видно издалека
+        const pg = 3 + 2 * Math.sin(S.time * 6);
+        roundRect(g, x - pg, y - pg, bw + pg * 2, bh + pg * 2 + 4, rr + pg);
+        g.fillStyle = 'rgba(255,196,0,.45)'; g.fill();
+      }
       // жёсткая тень-сдвиг вниз
       roundRect(g, x, y + 4, bw, bh, rr);
       g.fillStyle = INK; g.fill();
@@ -849,14 +976,28 @@ export function mount(root, ctx) {
       const dark = col === '#8c7bff' || col === '#ff5fa2';
       const txtCol = dark ? '#ffffff' : INK;
       const yy = y + press;
-      if (b.letter) {
-        // жёлтая буквенная плитка с чёрным контуром
+      if (b.gold) {
+        // золотой блок: блестит бегущим бликом
+        g.save(); roundRect(g, x, yy, bw, bh, rr); g.clip();
+        const gx = x + ((S.time * 0.8 + b.c * 0.37) % 1.6 - 0.3) * bw * 1.4;
+        g.fillStyle = 'rgba(255,255,255,.55)';
+        g.beginPath(); g.moveTo(gx, yy); g.lineTo(gx + bw * 0.22, yy); g.lineTo(gx - bw * 0.1, yy + bh); g.lineTo(gx - bw * 0.32, yy + bh); g.fill();
+        g.restore();
+      }
+      if (b.safe) {
+        g.font = `${Math.round(bh * 0.42)}px system-ui, sans-serif`;
+        g.fillText('🔒', x + bw / 2, yy + bh * 0.38);
+        g.font = `800 ${Math.round(bh * 0.2)}px ${DISPLAY}`;
+        g.fillStyle = '#ffffff';
+        g.fillText(b.hp, x + bw / 2, yy + bh * 0.82);
+      } else if (b.letter) {
+        // жёлтая буквенная плитка с чёрным контуром (у золотого блока — белая)
         const tw = bw * 0.54, th = bh * 0.56;
         const tx = x + (bw - tw) / 2, ty = yy + bh * 0.1;
         roundRect(g, tx, ty + 2, tw, th, tw * 0.24);
         g.fillStyle = INK; g.fill();
         roundRect(g, tx, ty, tw, th, tw * 0.24);
-        g.fillStyle = '#ffd60a'; g.fill();
+        g.fillStyle = b.gold ? '#ffffff' : '#ffd60a'; g.fill();
         g.lineWidth = Math.max(1.5, lw * 0.8); g.strokeStyle = INK; g.stroke();
         g.fillStyle = INK;
         g.font = `900 ${Math.round(th * 0.62)}px ${DISPLAY}`;
@@ -870,6 +1011,36 @@ export function mount(root, ctx) {
         g.font = `900 ${Math.round(bh * (digits > 3 ? 0.24 : digits > 2 ? 0.3 : 0.38))}px ${DISPLAY}`;
         g.fillStyle = txtCol;
         g.fillText(b.hp, x + bw / 2, yy + bh / 2 + 2);
+      }
+      if (b.gold) {
+        g.fillStyle = INK;
+        g.font = `900 ${Math.round(bh * 0.26)}px ${DISPLAY}`;
+        g.fillText('★', x + bw * 0.86, yy + bh * 0.2);
+      }
+      if (b.bomb) {
+        // значок бомбы в углу: белый кружок с 💣
+        const br = bh * 0.24, bx = x + bw - br * 0.6, by = yy + br * 0.5;
+        g.beginPath(); g.arc(bx, by, br, 0, Math.PI * 2);
+        g.fillStyle = '#ffffff'; g.fill(); g.lineWidth = Math.max(1.5, lw * 0.7); g.strokeStyle = INK; g.stroke();
+        g.font = `${Math.round(br * 1.4)}px system-ui, sans-serif`;
+        g.fillText('💣', bx, by + 1);
+      }
+      if (b.ice) {
+        // ледяная корка поверх блока
+        roundRect(g, x, yy, bw, bh, rr);
+        g.fillStyle = b.letter ? 'rgba(191,233,255,.5)' : 'rgba(191,233,255,.72)'; g.fill();
+        g.strokeStyle = '#ffffff'; g.lineWidth = Math.max(1.5, lw * 0.7);
+        g.beginPath();
+        g.moveTo(x + bw * 0.15, yy + bh * 0.3); g.lineTo(x + bw * 0.4, yy + bh * 0.12);
+        g.moveTo(x + bw * 0.6, yy + bh * 0.9); g.lineTo(x + bw * 0.88, yy + bh * 0.62);
+        g.stroke();
+        roundRect(g, x, yy, bw, bh, rr);
+        g.lineWidth = lw; g.strokeStyle = INK; g.stroke();
+        if (!b.letter) {
+          g.fillStyle = INK;
+          g.font = `900 ${Math.round(bh * 0.38)}px ${DISPLAY}`;
+          g.fillText(String(b.hp), x + bw / 2, yy + bh / 2 + 2);
+        }
       }
       if (b.flash > 0) {
         roundRect(g, x, yy, bw, bh, rr);
@@ -974,8 +1145,46 @@ export function mount(root, ctx) {
   function reward() {
     const r = {};
     if (collected.length) r.letters = collected.join('');
+    if (Object.keys(gotItems).length) r.items = { ...gotItems };
     return r;
   }
+  const gainEl = () => (Object.keys(gotItems).length
+    ? h('div.sh-gain', Object.keys(gotItems).map((id) => ITEMS.find((it) => it.id === id).emoji))
+    : null);
+
+  // перед партией: выбрать слово из Словаря (если оно есть) или просто играть
+  function pickTarget() {
+    const st = ctx.store.state;
+    const words = Object.keys(st.items).filter((id) => id.startsWith('card:') && st.items[id] > 0).map((id) => id.slice(5))
+      .filter((w) => wordStars(st, w) < MAX_STARS)
+      .sort((a, b) => wordStars(st, a) - wordStars(st, b) || a.length - b.length);
+    if (!words.length) return;
+    S.paused = true;
+    let over;
+    const start = (w) => {
+      over.remove();
+      if (w) {
+        T.word = w;
+        T.found = [...w].map(() => false);
+        T.stars = wordStars(st, w);
+        const b = S.blocks.find((o) => !o.safe);
+        if (b) makeGold(b);
+        renderTarget();
+      }
+      S.paused = false;
+      last = performance.now();
+    };
+    const stars = (n) => '★'.repeat(n) + '☆'.repeat(MAX_STARS - n);
+    over = h('div.sh-over', h('div.sh-over-box',
+      h('div.sh-over-title', 'Слово-цель'),
+      h('div.sh-sub', 'Буквы слова спрячутся в золотых блоках. Собери все — получишь их вдвое, вещь-сюрприз и звезду ★'),
+      h('div.sh-pick', words.slice(0, 12).map((w) => h('button.sh-pick-w', { onclick: () => start(w) },
+        h('span', w), h('small', `+${w.length * 2} букв`), h('span.sh-stars', { style: { flex: 'none' } }, stars(wordStars(st, w)))))),
+      h('button.btn.btn-ghost', { onclick: () => start(null) }, 'Просто играть'),
+    ));
+    wrap.append(over);
+  }
+  pickTarget();
 
   function saveBest() {
     const st = ctx.store.state;
@@ -1005,6 +1214,7 @@ export function mount(root, ctx) {
       collected.length
         ? h('div.sh-tiles', [...collected].sort().map((ch) => h('span.sh-tile', ch)))
         : h('p.muted.center', 'Пока ни одной буквы'),
+      gainEl(),
       h('div.row',
         h('button.btn.btn-ghost', { onclick: () => { exitModal.close(); } }, 'Играть'),
         h('button.btn', { onclick: () => { exitModal.close(); finish('Собрано!'); } }, 'Забрать'),
@@ -1037,6 +1247,8 @@ export function mount(root, ctx) {
       sorted.length
         ? h('div.sh-tiles', sorted.map((ch, i) => h('span.sh-tile', { style: { animationDelay: Math.min(1.2, 0.25 + i * 0.04) + 's' } }, ch)))
         : h('p.sh-none', 'В этот раз без букв'),
+      T.word ? h('div.sh-sub', T.done ? `Слово ${T.word} собрано ★` : `Слово ${T.word}: ${T.found.filter(Boolean).length} из ${T.word.length} — попробуй ещё`) : null,
+      gainEl(),
       takeBtn,
     );
     wrap.append(h('div.sh-over', box));

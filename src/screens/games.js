@@ -11,7 +11,7 @@ export const M3_MAX = 100;
 export const GAMES = [
   {
     id: 'shooter', title: 'Блоки', emoji: '🎯', flow: '→ L', need: () => null,
-    tip: 'Веди пальцем и отпускай. Сбитые блоки с буквами — твои.',
+    tip: 'Веди пальцем и отпускай. Сбитые блоки с буквами — твои. Лёд колется с первого удара, 💣 взрывает соседей, 🔒 сейф прячет вещь.',
   },
   {
     id: 'erudite', title: 'Эрудит', emoji: 'L', flow: 'L → 🎁',
@@ -50,7 +50,7 @@ export function renderGames(root, nav) {
   root.replaceChildren(h('div.screen.gm-screen',
     h('div.gm-core',
       h('div.gm-core-t', h('b', 'Слова'), h('i', 'становятся вещами')),
-      row(GAMES[0], 'Сбивай блоки — добывай буквы'),
+      row(GAMES[0], totalWords() ? 'Буквы · собери слово из Словаря ★' : 'Сбивай блоки — добывай буквы'),
       mid((sampleL.length ? sampleL : ['А', 'О', 'К']).map((ch) => h('span.ltr', ch)), `${letters} ${plural(letters, 'буква', 'буквы', 'букв')}`),
       row(GAMES[1], 'Собери слово — получи вещь-картинку'),
       mid(sampleI.length ? sampleI.map((e) => h('span.gm-core-em', e)) : [h('span.gm-core-em', '🎁')], `${kinds} ${plural(kinds, 'вещь', 'вещи', 'вещей')}` + (totalWords() ? ` · 📖 ${totalWords()} ${plural(totalWords(), 'слово', 'слова', 'слов')}` : '')),
