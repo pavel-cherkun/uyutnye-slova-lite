@@ -266,7 +266,7 @@ export function mount(root, ctx) {
         // что получится: само слово-вещь или вещь из его категории
         const it = getItem(wordToItem(w));
         rar = it.rarity;
-        if (it.tier === 1) previewEl.append(h('span', `${it.emoji} ${TOOL_USE[it.id] ? 'бустер' : 'вещь'}`), h('span.rar-tag.rar-' + it.rarity, RARITY[it.rarity].name));
+        if (it.tier === 1) previewEl.append(h('span', `${it.emoji} ${it.word.toLowerCase()}${TOOL_USE[it.id] ? ' · бустер' : ''}`), h('span.rar-tag.rar-' + it.rarity, RARITY[it.rarity].name));
         else previewEl.append(h('span', '📖 в словарь'));
       }
     }

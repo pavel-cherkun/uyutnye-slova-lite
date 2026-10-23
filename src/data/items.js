@@ -5,6 +5,7 @@
 import { CARD_WORDS, ESSENCE_WORDS } from './words.js';
 import { normWord } from './letters.js';
 import { dictCat } from './dict.js';
+import { ALIASES } from './aliases.js';
 
 // place: куда можно поставить в квартире (floor — на пол/поверхность, wall — на стену)
 // use: что можно сделать (eat — съесть, wear — надеть, boost — бустер в мини-играх, collect — коллекция)
@@ -33,6 +34,7 @@ export const CATEGORIES = {
   city:       { name: 'Город',         icon: '🏙️', use: 'collect' },
   holiday:    { name: 'Праздник',      icon: '🎉', use: 'collect' },
   toys:       { name: 'Игрушки',       icon: '🧸', use: 'collect' },
+  feelings:   { name: 'Чувства',       icon: '💗', use: 'collect' },
   // Только для ярусов 2–3
   misc:       { name: 'Разное',        icon: '📦', use: 'collect' },
   essence:    { name: 'Эссенции',      icon: '✨', use: 'burn' },
@@ -110,7 +112,6 @@ const TABLE = `
 СКОВОРОДА 🍳 dishes c
 МИСКА 🥣 dishes c
 БАНКА 🫙 dishes c
-БОКАЛ 🥂 dishes r
 СОЛОНКА 🧂 dishes c
 ГИТАРА 🎸 music r
 ПИАНИНО 🎹 music l
@@ -178,8 +179,6 @@ const TABLE = `
 СОК 🧃 drinks c
 ЛИМОНАД 🥤 drinks c
 МОЛОКО 🥛 drinks c
-ВИНО 🍷 drinks r
-ШАМПАНСКОЕ 🍾 drinks e
 ПЛАТЬЕ 👗 clothes r
 ФУТБОЛКА 👕 clothes c
 РУБАШКА 👔 clothes c
@@ -512,6 +511,27 @@ const TABLE = `
 МЕТЛА 🧹 furniture c
 ВЕДРО 🪣 bath c
 ПЛАКАТ 🪧 decor c
+СЕРДЦЕ ❤️ feelings r
+ПОЦЕЛУЙ 💋 feelings e
+ВЗРЫВ 💥 feelings r
+СОН 💤 feelings c
+МЫСЛЬ 💭 feelings c
+БРЫЗГИ 💦 feelings c
+ЗЛОСТЬ 💢 feelings c
+СОТНЯ 💯 feelings r
+РАЗЛУКА 💔 feelings r
+АМУР 💘 feelings e
+ИСКРА ✨ feelings r
+ЗВЕЗДОЧКА 🌟 nature r
+УЛЫБКА 😊 feelings c
+СМЕХ 😂 feelings c
+СЛЕЗА 😢 feelings c
+ПРИВИДЕНИЕ 👻 fantasy e
+ИНОПЛАНЕТЯНИН 👽 fantasy l
+РОБОТ 🤖 fantasy r
+КЛОУН 🤡 fantasy r
+ТЫКВА 🎃 holiday r
+ГЛАЗ 👁️ feelings c
 `;
 
 export const ITEMS = TABLE.trim().split('\n').map((line) => {
@@ -583,6 +603,8 @@ export const ROOMS = [
 export function classifyWord(raw) {
   const word = normWord(raw);
   if (BY_ID[word]) return { kind: 'item', id: word, word };
+  // синоним: другое слово для того же эмодзи (ЛЮБОВЬ → ❤️ сердце)
+  if (ALIASES[word] && BY_ID[ALIASES[word]]) return { kind: 'item', id: ALIASES[word], word, alias: true };
   if (CARD_WORDS[word]) return { kind: 'card', id: 'card:' + word, word };
   if (ESSENCE_WORDS.has(word)) return { kind: 'essence', id: 'ess:' + word, word };
   const dc = dictCat(word);
