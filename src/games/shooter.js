@@ -5,6 +5,7 @@ import { ITEMS } from '../data/items.js';
 import { onPause, hasAds, showRewarded } from '../platform.js';
 import { h, modal, shuffle, confetti } from '../ui/common.js';
 import { sfx, buzz } from '../ui/device.js';
+import { celebrate, nearMiss, rollLucky, starsFor } from '../ui/victory.js';
 
 export const meta = {
   id: 'shooter',
@@ -108,6 +109,9 @@ const CSS = `
 .sh-record { align-self:center; font-family:var(--display); font-weight:900; font-size:14px; background:var(--pink); color:#fff;
   border:2.5px solid var(--ink); border-radius:99px; padding:4px 12px; box-shadow:0 3px 0 var(--ink); transform:rotate(-3deg); }
 .sh-take { font-family:var(--display); text-transform:uppercase; }
+.sh-goal { background:#fff; }
+.sh-goal.sh-done { background:var(--lime); animation: sh-bump .45s cubic-bezier(.3,1.8,.5,1); }
+.sh-turn.sh-low { background:var(--pink, #ff5fa2); color:#fff; }
 .sh-target { display:flex; align-items:center; gap:6px; padding:0 10px 6px; flex:none; }
 .sh-target-l { font-size:10px; font-weight:900; text-transform:uppercase; opacity:.55; white-space:nowrap; }
 .sh-slots { display:flex; gap:3px; flex-wrap:wrap; }
@@ -153,7 +157,12 @@ function roundRect(g, x, y, w, hgt, r) {
 }
 
 // ---------- Игра ----------
-export function mount(root, ctx) {
+// Уровни Блоков: сбей N блоков за K ходов. Короткие — проиграть быстро, переиграть сразу.
+export function blocksLevel(lv) {
+  return { need: Math.min(70, 6 + lv * 2 + Math.floor(lv / 5) * 2), turns: Math.min(16, 9 + Math.floor(lv / 3)) };
+}
+
+export function mount(root, ctx, opts = {}) {
   root.classList.add('sh-root');
 
   // --- Состояние ---
@@ -189,11 +198,15 @@ export function mount(root, ctx) {
   // слово-цель из Словаря: его буквы прячутся в золотых блоках
   const T = { word: null, found: [], done: false, stars: 0, sinceGold: 0 };
   let arrived = 0;        // сколько букв «долетело» до счётчика
-  const best0 = (ctx.store.state.stats && ctx.store.state.stats.shooterBest) || 0;
+  const LV = ctx.store.state.progress.blocksLevel || 1;
+  const GOAL = blocksLevel(LV);
+  let smashed = 0;        // сбито блоков на уровне
 
   // --- DOM ---
-  const turnNum = h('b', '1');
-  const turnPill = h('div.sh-pill.sh-turn', h('small', 'ход'), turnNum);
+  const turnNum = h('b', `${GOAL.turns}`);
+  const turnPill = h('div.sh-pill.sh-turn', h('small', 'ходов'), turnNum);
+  const goalNum = h('b', `0/${GOAL.need}`);
+  const goalPill = h('div.sh-pill.sh-goal', '🎯', goalNum);
   const letterNum = h('b', '0');
   const letterPill = h('div.sh-pill', h('span.ltr', 'А'), letterNum);
   const strip = h('div.sh-strip', h('span.sh-strip-empty', 'Сбивай блоки с буквами — они попадут сюда'));
@@ -209,7 +222,8 @@ export function mount(root, ctx) {
     h('style', CSS),
     h('div.game-top',
       h('button.btn-icon', { onclick: onExit, 'aria-label': 'Выход' }, '✕'),
-      h('div.sh-title', 'Блоки'),
+      h('div.sh-title', `Ур. ${LV}`),
+      goalPill,
       turnPill,
       letterPill,
     ),
@@ -453,6 +467,9 @@ export function mount(root, ctx) {
       flyLetter(b.letter, cx, cy);
     }
     if (b.gold) onGold(b.letter);
+    smashed++;
+    goalNum.textContent = `${Math.min(smashed, GOAL.need)}/${GOAL.need}`;
+    if (smashed === GOAL.need) { goalPill.classList.add('sh-done'); sfx('win'); }
     if (b.safe) {
       const it = pickItem(Math.random() < 0.3 ? 'r' : 'c', { ...ctx.store.state.dex, ...gotItems });
       gotItems[it.id] = (gotItems[it.id] || 0) + 1;
@@ -691,14 +708,15 @@ export function mount(root, ctx) {
     S.plusPending = 0;
     if (S.nextCannonX != null) S.cannonX = S.nextCannonX;
     S.turn++;
-    turnNum.textContent = String(S.turn);
+    const turnsLeft = GOAL.turns - (S.turn - 1);
+    turnNum.textContent = String(Math.max(0, turnsLeft));
     turnPill.classList.remove('sh-bump'); void turnPill.offsetWidth; turnPill.classList.add('sh-bump');
-    if (!S.recordShown && best0 > 0 && S.turn > best0) {
-      S.recordShown = true;
-      showBanner('НОВЫЙ РЕКОРД!');
-    }
+    turnPill.classList.toggle('sh-low', turnsLeft <= 2);
     speedBtn.classList.add('sh-hide');
     recallBtn.classList.add('sh-hide');
+    // цель уровня: сбито достаточно — победа; ходы кончились — «Почти!»
+    if (smashed >= GOAL.need) { levelWin(turnsLeft); return; }
+    if (turnsLeft <= 0) { levelFail(); return; }
     // сдвиг вниз
     S.blocks = S.blocks.filter((b) => !b.dead);
     S.bonuses = S.bonuses.filter((b) => !b.dead);
@@ -718,7 +736,7 @@ export function mount(root, ctx) {
   }
 
   function checkAfterShift() {
-    if (S.blocks.some((b) => b.r >= ROWS - 1)) gameOver();
+    if (S.blocks.some((b) => b.r >= ROWS - 1)) levelFail();
     else S.phase = 'aim';
   }
 
@@ -1162,6 +1180,14 @@ export function mount(root, ctx) {
       .filter((w) => wordStars(st, w) < MAX_STARS)
       .sort((a, b) => wordStars(st, a) - wordStars(st, b) || a.length - b.length);
     if (!words.length) return;
+    if (opts.again) { // «Ещё раз» / «Следующий»: то же слово (если не собрано), без окна выбора
+      if (opts.word && words.includes(opts.word)) {
+        T.word = opts.word; T.found = [...opts.word].map(() => false); T.stars = wordStars(st, opts.word);
+        const b = S.blocks.find((o) => !o.safe); if (b) makeGold(b);
+        renderTarget();
+      }
+      return;
+    }
     S.paused = true;
     let over;
     const start = (w) => {
@@ -1208,7 +1234,7 @@ export function mount(root, ctx) {
   let exitModal = null;
   function onExit() {
     if (S.finished || exitModal) return;
-    if (S.phase === 'over') { finish('Собрано!'); return; }
+    if (S.phase === 'over') return;
     S.paused = true;
     S.aiming = false;
     S.aimDir = null;
@@ -1230,42 +1256,56 @@ export function mount(root, ctx) {
     });
   }
 
-  function gameOver() {
+  // --- Уровень пройден: долгий праздник ---
+  function levelWin(turnsLeft) {
     S.phase = 'over';
+    S.finished = true;
+    const st = ctx.store.state;
+    const stars = starsFor(turnsLeft, GOAL.turns);
+    const lucky = rollLucky();
+    let bonus = '';
+    for (let i = 0; i < 3 + Math.floor(LV / 3) + (stars - 1) * 2; i++) bonus += randomLetter();
+    const letters = collected.join('') + bonus;
+    // сундук: вещь (обычная или редкая; золотой — эпик)
+    const rar = lucky?.kind === 'gold' ? 'e' : Math.random() < 0.3 ? 'r' : 'c';
+    const it = pickItem(rar, { ...st.dex, ...gotItems });
+    const items = { ...gotItems, [it.id]: (gotItems[it.id] || 0) + 1 };
+    const isNew = new Set(Object.keys(items).filter((id) => !(st.dex || {})[id]));
+    const all = lucky?.kind === 'x2' ? letters + letters : letters;
+    st.progress.blocksLevel = LV + 1;
+    ctx.award({ letters: all, items });
+    const nextWord = T.word && !T.done ? T.word : null;
+    celebrate({
+      title: `Уровень ${LV} пройден!`, stars, letters: all, items, isNew, lucky,
+      chapter: { label: `Блоки · ${Math.floor((LV - 1) / 10) * 10 + 1}–${Math.floor((LV - 1) / 10) * 10 + 10}`, from: (LV - 1) % 10, to: ((LV - 1) % 10) + 1, max: 10 },
+      buttons: [
+        { label: `Уровень ${LV + 1} ▶`, primary: true, onclick: () => ctx.again({ word: nextWord }, true) },
+        { label: 'В меню', onclick: () => ctx.exit() },
+      ],
+    });
+  }
+
+  // --- Не вышло: быстро и без потерь — буквы остаются, «Ещё раз» сразу ---
+  function levelFail() {
+    if (S.finished) return;
+    S.phase = 'over';
+    S.finished = true;
     speedBtn.classList.add('sh-hide');
     recallBtn.classList.add('sh-hide');
-    vibe([40, 60, 40]);
-    sfx('error');
-    const isRecord = S.turn > best0;
-    const takeBtn = h('button.btn.btn-big.sh-take', { onclick: () => finish('Собрано!') }, 'Забрать');
-    // на Яндекс Играх: удвоить буквы партии за просмотр рекламы
-    const doubleBtn = hasAds() && collected.length ? h('button.btn.btn-violet.btn-big', {
-      onclick: async () => {
-        if (!(await showRewarded()) || S.finished) return;
-        collected.push(...collected);
-        finish('Буквы ×2!');
-      },
-    }, `📺 ×2 буквы за рекламу`) : null;
-    const sorted = [...collected].sort();
-    const box = h('div.sh-over-box',
-      h('div.sh-over-title', 'Блоки дошли до низа'),
-      h('div.sh-big', h('small', 'ХОД'), h('b', String(S.turn))),
-      isRecord && best0 > 0 ? h('div.sh-record', 'Новый рекорд!') : null,
-      h('div.sh-over-stats',
-        h('div.sh-pill', h('small', 'рекорд'), h('b', String(Math.max(best0, S.turn)))),
-        S.bestCombo >= 2 ? h('div.sh-pill', h('small', 'комбо'), h('b', '×' + S.bestCombo)) : null,
-      ),
-      sorted.length
-        ? h('div.sh-tiles', sorted.map((ch, i) => h('span.sh-tile', { style: { animationDelay: Math.min(1.2, 0.25 + i * 0.04) + 's' } }, ch)))
-        : h('p.sh-none', 'В этот раз без букв'),
-      T.word ? h('div.sh-sub', T.done ? `Слово ${T.word} собрано ★` : `Слово ${T.word}: ${T.found.filter(Boolean).length} из ${T.word.length} — попробуй ещё`) : null,
-      gainEl(),
-      doubleBtn,
-      takeBtn,
-    );
-    wrap.append(h('div.sh-over', box));
-    saveBest();
-    if (isRecord && best0 > 0) setTimeout(() => { if (!S.finished) sfx('reward'); }, 350);
+    const got = reward();
+    if (got.letters || got.items) ctx.award(got);
+    const word = T.word && !T.done ? T.word : null;
+    nearMiss({
+      title: smashed >= GOAL.need * 0.7 ? 'Почти!' : 'Не вышло',
+      left: [h('span', `Сбито ${smashed} из ${GOAL.need}`), collected.length ? h('span', `· буквы твои: +${collected.length}`) : null],
+      extra: [hasAds() && collected.length ? { label: '📺 ×2 буквы за рекламу', violet: true, keep: true, onclick: async (e) => {
+        const btn = e.target.closest('button');
+        btn.disabled = true;
+        if (await showRewarded()) { ctx.award({ letters: collected.join('') }); btn.textContent = `Буквы ×2 ✓`; } else btn.disabled = false;
+      } } : null],
+      onRetry: () => ctx.again({ word }),
+      onMenu: () => ctx.exit(),
+    });
   }
 
   raf = requestAnimationFrame(frame);

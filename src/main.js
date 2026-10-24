@@ -72,7 +72,7 @@ subscribe(() => {
   requestAnimationFrame(() => { hudQueued = false; renderHud(); });
 });
 
-async function openGame(id) {
+async function openGame(id, opts = {}) {
   const g = GAMES.find((x) => x.id === id);
   if (!g || gameOpen) return;
   const need = g.need();
@@ -129,9 +129,23 @@ async function openGame(id) {
       showInterstitial().then(() => { showReward(title, reward); hold(false); });
     },
     exit: () => { close(); hold(false); showInterstitial(); },
+    // награда прямо в игре — без выхода в меню (победа с праздником внутри мини-игры)
+    award(reward = {}) {
+      (state.stats.plays ||= {})[id] = (state.stats.plays[id] || 0) + 1;
+      store.applyReward(reward);
+      store.commit();
+      renderHud();
+    },
+    // «Ещё раз» и «Следующий уровень»: сразу заново, без меню и правил; withAd — реклама в паузе между уровнями
+    again(next = {}, withAd = false) {
+      close();
+      hold(false);
+      const go = () => openGame(id, { ...next, again: true });
+      if (withAd) showInterstitial().then(go); else go();
+    },
   };
   try {
-    cleanup = mod.mount(layer, ctx);
+    cleanup = mod.mount(layer, ctx, opts);
     enterGame();
   } catch (e) {
     console.error(e);

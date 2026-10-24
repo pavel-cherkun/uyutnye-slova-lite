@@ -11,7 +11,7 @@ export const M3_MAX = 100;
 export const GAMES = [
   {
     id: 'shooter', title: 'Блоки', emoji: '🎯', flow: '→ L', need: () => null,
-    tip: 'Веди пальцем и отпускай. Сбитые блоки с буквами — твои. Лёд колется с первого удара, 💣 взрывает соседей, 🔒 сейф прячет вещь.',
+    tip: 'Веди пальцем и отпускай. Сбей нужное число блоков за ходы — буквы из блоков твои. Лёд колется с первого удара, 💣 взрывает соседей, 🔒 сейф прячет вещь.',
   },
   {
     id: 'erudite', title: 'Составь слово', emoji: 'L', flow: 'L → 🎁',
@@ -40,7 +40,7 @@ export function renderGames(root, nav) {
 
   // одна строка под названием: только то, что важно сейчас
   const status = {
-    shooter: `${letters} ${plural(letters, 'буква', 'буквы', 'букв')}`,
+    shooter: `уровень ${state.progress.blocksLevel || 1} · ${letters} ${plural(letters, 'буква', 'буквы', 'букв')}`,
     erudite: `${kinds} ${plural(kinds, 'вещь', 'вещи', 'вещей')}`,
     match3: kinds < 3 ? `нужно 3 вещи · ${kinds}/3` : `уровень ${lvl}`,
   };

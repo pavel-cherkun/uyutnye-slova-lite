@@ -389,6 +389,16 @@ export function mount(root, ctx) {
       confetti(innerWidth / 2, innerHeight / 3, rar === 'l' ? 90 : 50);
     }
     floatText(getItem(gotId).tier === 1 ? `${getItem(gotId).emoji} ${getItem(gotId).word.toLowerCase()}` : '📖 в словарь — нарисуй его!', innerWidth / 2, innerHeight * 0.35);
+    // переменная награда: иногда за слово сверху падают буквы (чем длиннее слово, тем чаще)
+    if (Math.random() < 0.1 + Math.min(0.15, w.length * 0.02)) {
+      const extra = Array.from({ length: 2 + Math.floor(w.length / 3) }, () => randomLetter()).join('');
+      store.addLetters(extra);
+      later(() => {
+        floatText(`🍀 Удача! +${extra.length} букв`, innerWidth / 2, innerHeight * 0.5);
+        confetti(innerWidth / 2, innerHeight / 2, 40);
+        sfx('win'); buzz([20, 40, 20]);
+      }, 700);
+    }
     word = [];
     topRank = -1; lastLen = 0;
     store.commit();

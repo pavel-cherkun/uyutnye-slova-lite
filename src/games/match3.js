@@ -10,6 +10,7 @@ import { sfx, buzz } from '../ui/device.js';
 import { spellModal } from '../ui/spell.js';
 import { randomLetter } from '../data/letters.js';
 import { ITEMS } from '../data/items.js';
+import { celebrate, nearMiss, rollLucky, starsFor } from '../ui/victory.js';
 
 export const meta = {
   id: 'match3',
@@ -59,11 +60,12 @@ export function levelConfig(level) {
   }
   // целей: 1 → 2 → иногда 3; у боссов 3, во второй половине — 4
   const nGoals = level <= 2 ? 1 : boss ? (ch >= 5 ? 4 : 3) : level >= 12 && level % 3 === 0 ? 3 : 2;
-  const base = 8 + level * 0.35 + ch * 1.5;
-  const per = Math.round(Math.min(42, base * (boss ? 1.3 : 1)));
-  const need = nGoals >= 3 ? Math.max(8, Math.round(per * 0.7)) : nGoals === 1 ? per + 4 : per;
+  // короткие уровни (10–16 ходов): проиграть — быстро, переиграть — сразу
+  const base = 5 + level * 0.22 + ch;
+  const per = Math.round(Math.min(26, base * (boss ? 1.3 : 1)));
+  const need = nGoals >= 3 ? Math.max(5, Math.round(per * 0.7)) : nGoals === 1 ? per + 3 : per;
   const goalTypes = shuffle([...Array(ntypes).keys()], rng).slice(0, nGoals);
-  const moves = level <= 3 ? 20 : Math.min(28, 18 + Math.floor(rng() * 3) + Math.floor(ch / 2) + (boss ? 3 : 0));
+  const moves = level <= 3 ? 12 : Math.min(16, 11 + Math.floor(rng() * 2) + Math.floor(ch / 3) + (boss ? 3 : 0));
   return {
     level, cat, items, ntypes, boss, chapter: ch,
     goals: goalTypes.map((type) => ({ type, need })),
@@ -86,6 +88,16 @@ export function levelReward(level, owned = {}) {
   const fresh = all.filter((it) => !owned[it.id]);
   const pool = fresh.length ? fresh : all;
   return { letters, items: { [pool[Math.floor(Math.random() * pool.length)].id]: 1 } };
+}
+
+/** «Золотой сундук»: вещь-сюрприз на ступень реже обычной */
+function goldItem(items, owned) {
+  const cur = getItem(Object.keys(items)[0]);
+  const rar = { c: 'r', r: 'e', e: 'l', l: 'l' }[cur.rarity] || 'e';
+  const all = ITEMS.filter((it) => it.rarity === rar);
+  const fresh = all.filter((it) => !owned[it.id]);
+  const pool = fresh.length ? fresh : all;
+  return { [pool[Math.floor(Math.random() * pool.length)].id]: 1 };
 }
 
 const key = (r, c) => r * 100 + c;
@@ -1321,7 +1333,12 @@ function playLevel(root, ctx, chosen) {
     store.commit();
     // цели собраны — эти вещи сгорают (по одной), взамен — редкая вещь-сюрприз
     for (const g of goals) { const id = items[g.type].id; if (id) store.removeItem(id, 1); }
+    const stars = starsFor(movesLeft, cfg.moves);
+    const lucky = rollLucky();
     const reward = levelReward(level, store.state.dex || {});
+    if (lucky?.kind === 'x2') reward.letters += reward.letters;
+    if (lucky?.kind === 'gold') reward.items = goldItem(reward.items, store.state.dex || {});
+    reward.letters += Array.from({ length: stars - 1 }, () => randomLetter()).join(''); // за каждую звезду сверху — буква
     buzz([30, 50, 30, 50, 60]);
     sfx('reward');
     const rect = boardEl.getBoundingClientRect();
@@ -1344,53 +1361,54 @@ function playLevel(root, ctx, chosen) {
       await wait(700);
     }
     if (!alive) return;
-    ctx.finish(reward, cfg.boss ? `Босс главы побеждён! 👑` : `Уровень ${level} пройден!`);
+    const isNew = new Set(Object.keys(reward.items).filter((id) => !(store.state.dex || {})[id]));
+    ctx.award(reward);
+    const ch = chapterOf(level);
+    const picks = items.map((it) => it.id).filter(Boolean);
+    celebrate({
+      title: cfg.boss ? 'Босс побеждён! 👑' : `Уровень ${level} пройден!`,
+      stars, letters: reward.letters, items: reward.items, isNew, lucky,
+      chapter: { label: `Глава ${ch + 1} · ${CHAPTERS[ch % CHAPTERS.length]}`, from: (level - 1) % 10, to: ((level - 1) % 10) + 1, max: 10 },
+      buttons: [
+        { label: `Уровень ${level + 1} ▶`, primary: true, onclick: () => ctx.again({ picks }, true) },
+        { label: 'В меню', onclick: () => ctx.exit() },
+      ],
+    });
   }
 
   function lose() {
     ended = true;
     busy = true;
     updateMoves();
-    sfx('error'); buzz([60, 40, 60]);
-    const finishLose = () => ctx.finish({}, 'Ходы закончились');
-    if (extraUsed) {
-      banner('Ходы закончились 😿', 'm3-warn', 1300);
-      return wait(1200).then(() => { if (alive) finishLose(); });
-    }
+    const picks = items.map((it) => it.id).filter(Boolean);
     const left = goals.filter((g) => g.left > 0).map((g) => h('div.m3-goal', gemEl(g.type), String(g.left)));
-    let m = null;
+    let nm = null;
     const grant = () => {
-        extraUsed = true;
-        movesLeft += 5;
-        ended = false;
-        updateMoves(true);
-        openModal = null;
-        m.close();
-        banner('+5 ходов!', 'm3-c2', 1100);
-        sfx('reward'); buzz([15, 30, 15]);
-        busy = false;
-        scheduleHint();
+      extraUsed = true;
+      movesLeft += 5;
+      ended = false;
+      updateMoves(true);
+      nm.close();
+      openModal = null;
+      banner('+5 ходов!', 'm3-c2', 1100);
+      sfx('reward'); buzz([15, 30, 15]);
+      busy = false;
+      scheduleHint();
     };
-    const extraBtn = h('button.btn.btn-big', {
-      onclick: () => {
-        if (!spendCommonLetters(store, CONTINUE_COST)) { sfx('error'); toast('Не хватает букв — сыграй в Блоки'); return; }
-        grant();
-      },
-    }, `+5 ходов за ${CONTINUE_COST} буквы`);
-    // на Яндекс Играх — те же +5 ходов за просмотр рекламы
-    const adBtn = hasAds() ? h('button.btn.btn-violet.btn-big', {
-      onclick: async () => { if (await showRewarded() && alive) grant(); },
-    }, '📺 +5 ходов за рекламу') : null;
-    m = modal([
-      h('div.modal-title', 'Ходы закончились'),
-      h('div.m3-sub', 'Осталось совсем чуть-чуть:'),
-      h('div.m3-lose-goals', left),
-      extraBtn,
-      adBtn,
-      h('button.btn.btn-ghost.btn-big', { onclick: () => { openModal = null; m.close(); finishLose(); } }, 'Завершить'),
-    ], { dismissable: false });
-    m.el.classList.add('m3-modal');
-    openModal = m;
+    nm = nearMiss({
+      title: 'Почти!',
+      left: [h('span', 'Осталось:'), ...left],
+      extra: extraUsed ? [] : [
+        { label: `+5 ходов за ${CONTINUE_COST} буквы`, keep: true, onclick: () => {
+          if (!spendCommonLetters(store, CONTINUE_COST)) { sfx('error'); toast('Не хватает букв — сыграй в Блоки'); return; }
+          grant();
+        } },
+        hasAds() ? { label: '📺 +5 ходов за рекламу', violet: true, keep: true, onclick: async () => { if (await showRewarded() && alive) grant(); } } : null,
+      ],
+      onRetry: () => ctx.again({ picks }),
+      onMenu: () => ctx.exit(),
+    });
+    openModal = nm;
   }
 
   async function onExit() {
@@ -1548,7 +1566,7 @@ const PICK_CSS = `
 @keyframes m3p-in { 0% { transform:scale(.3); } }
 `;
 
-export function mount(root, ctx) {
+export function mount(root, ctx, opts = {}) {
   const store = ctx.store;
   const level = store.state.progress.match3Level || 1;
   const cfg0 = levelConfig(level);
@@ -1629,6 +1647,13 @@ export function mount(root, ctx) {
     cleanup = playLevel(root, ctx, chosen);
   }
 
+  // «Ещё раз» / «Следующий»: те же вещи (если ещё есть), сразу в игру
+  if (opts.picks) {
+    const have = new Set(cands.map((c) => c.it.id));
+    const keep = opts.picks.filter((id) => have.has(id)).slice(0, MAXP);
+    for (const c of cands) if (keep.length < MAXP && !keep.includes(c.it.id)) keep.push(c.it.id);
+    if (keep.length >= MIN_PICK) { picked = keep; start(); return () => { cleanup && cleanup(); }; }
+  }
   render();
   return () => { root.classList.remove('m3p-root'); cleanup && cleanup(); };
 }
