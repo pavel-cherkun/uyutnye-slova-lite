@@ -22,7 +22,7 @@
   --hard: 0 4px 0 var(--ink);
   --hard-lg: 0 6px 0 var(--ink);
   --shadow: var(--hard);
-  --display: 'Unbounded', 'Nunito', system-ui, sans-serif;
+  --display: 'TikTok Sans', system-ui, sans-serif;
   /* редкость */
   --r-c: #b8b8c0;
   --r-r: #4fb8ff;
@@ -301,19 +301,13 @@ button { touch-action: manipulation; }
 /* рисунок игрока вместо эмодзи: масштабируется как текст */
 img.pic { width: 1.15em; height: 1.15em; object-fit: contain; vertical-align: -0.2em; display: inline-block; pointer-events: none; -webkit-user-drag: none; }
 
-/* обучение на главном: номер шага, палец, карточка «что делать» */
+/* обучение на главном: номер шага и палец */
 .gm-core-ic { position: relative; }
 .gm-num { position: absolute; top: -4px; left: -4px; width: 22px; height: 22px; border-radius: 50%; background: var(--pink, #ff5fa2); color: #fff;
   font-style: normal; font-family: var(--display); font-weight: 900; font-size: 12px; display: grid; place-items: center; border: 2px solid #111; }
 .gm-core-btn { position: relative; }
 .gm-finger { position: absolute; right: 18px; bottom: -26px; font-size: 34px; pointer-events: none; animation: gm-finger 1s ease-in-out infinite; z-index: 2; }
 @keyframes gm-finger { 50% { transform: translateY(-8px) rotate(-8deg); } }
-.gm-step { display: flex; align-items: center; gap: 10px; background: #fff; color: #111; border-radius: 20px; padding: 10px 12px; margin-bottom: 12px; }
-.gm-step-n { flex: none; width: 34px; height: 34px; border-radius: 50%; background: var(--lime); border: 2.5px solid #111; display: grid; place-items: center;
-  font-family: var(--display); font-weight: 900; font-size: 17px; }
-.gm-step-tx { display: flex; flex-direction: column; }
-.gm-step-tx b { font-size: 14px; font-weight: 900; }
-.gm-step-tx span { font-size: 12px; font-weight: 700; opacity: .7; }
 .wl-row { display: flex; align-items: center; gap: 10px; background: var(--card-soft, #f3f2ec); border-radius: 18px; padding: 10px 12px; }
 .wl-n { flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--lime); border: 2px solid #111; display: grid; place-items: center; font-weight: 900; font-size: 13px; }
 .wl-ic { flex: none; font-size: 28px; width: 36px; text-align: center; }
@@ -321,3 +315,10 @@ img.pic { width: 1.15em; height: 1.15em; object-fit: contain; vertical-align: -0
 .wl-tx b { font-size: 16px; font-weight: 900; }
 .wl-tx span { font-size: 13px; font-weight: 700; opacity: .7; }
 .wl-arr { text-align: center; font-weight: 900; font-size: 18px; opacity: .5; margin: -2px 0; }
+
+/* упрощённый главный: три кнопки и стрелки между ними */
+.gm-core .gm-core-arr { display: block; width: auto; text-align: center; font-size: 22px; opacity: .45; padding: 4px 0; }
+.gm-core-btn { padding-top: 10px; padding-bottom: 10px; }
+.gm-core-tx b { font-size: 24px; }
+.gm-core-tx span { font-size: 14px; }
+.gm-core-go { font-size: 18px; }

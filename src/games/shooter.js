@@ -139,7 +139,7 @@ function blockColor(hp, turn) {
   return PALETTE[Math.min(PALETTE.length - 1, Math.floor(t * PALETTE.length))];
 }
 const INK = '#111111';
-const DISPLAY = 'Unbounded, Nunito, system-ui, sans-serif';
+const DISPLAY = "'TikTok Sans', system-ui, sans-serif";
 
 function roundRect(g, x, y, w, hgt, r) {
   r = Math.min(r, w / 2, hgt / 2);
