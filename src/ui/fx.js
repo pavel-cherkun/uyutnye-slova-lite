@@ -1,7 +1,7 @@
 // Эффекты «маленьких и больших побед»: всплывающие +N, полёт трофеев в шапку,
 // окно наград с переворотом карточек, праздник нового уровня. Окна идут очередью, не перекрывая друг друга.
 
-import { h, confetti } from './common.js';
+import { h, confetti, itemPic } from './common.js';
 import { getItem, RARITY } from '../data/items.js';
 import { lastNew } from '../state.js';
 import { sfx, buzz } from './device.js';
@@ -156,7 +156,7 @@ export function revealReward(title, reward = {}, onClose, opts = {}) {
     if (reward.keys) add('🗝️', 'ключ', reward.keys, 'e');
     for (const [id, n] of Object.entries(reward.items || {})) {
       const it = getItem(id);
-      add(it.emoji, it.word.toLowerCase(), n, it.rarity, fresh.has(id));
+      add(itemPic(it), it.word.toLowerCase(), n, it.rarity, fresh.has(id));
     }
     const letters = typeof reward.letters === 'string' ? reward.letters
       : Object.entries(reward.letters || {}).map(([ch, n]) => ch.repeat(n)).join('');

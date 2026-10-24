@@ -1,7 +1,7 @@
 // Главный экран: три игры одной цепочкой. Блоки добывают буквы → Эрудит делает из букв вещи →
 // Три в ряд играет вещами (цели сгорают) и возвращает буквы. Следующий шаг подсвечен.
 
-import { h, toast } from '../ui/common.js';
+import { h, toast, itemPic } from '../ui/common.js';
 import { state, totalLetters, totalWords } from '../state.js';
 import { getItem } from '../data/items.js';
 
@@ -36,7 +36,7 @@ export function renderGames(root, nav) {
   // следующий шаг: мало букв → Блоки, мало вещей → Эрудит, иначе Три в ряд
   const step = letters < 3 ? 'shooter' : kinds < 3 ? 'erudite' : 'match3';
   const sampleL = Object.entries(state.letters).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([ch]) => ch);
-  const sampleI = Object.keys(state.items).filter((id) => state.items[id] > 0 && getItem(id).tier === 1).slice(-5).map((id) => getItem(id).emoji);
+  const sampleI = Object.keys(state.items).filter((id) => state.items[id] > 0 && getItem(id).tier === 1).slice(-5).map((id) => getItem(id));
 
   const row = (g, sub) => {
     const need = g.need();
@@ -53,7 +53,7 @@ export function renderGames(root, nav) {
       row(GAMES[0], totalWords() ? 'Буквы · собери слово из Словаря ★' : 'Сбивай блоки — добывай буквы'),
       mid((sampleL.length ? sampleL : ['А', 'О', 'К']).map((ch) => h('span.ltr', ch)), `${letters} ${plural(letters, 'буква', 'буквы', 'букв')}`),
       row(GAMES[1], 'Собери слово — получи вещь-картинку'),
-      mid(sampleI.length ? sampleI.map((e) => h('span.gm-core-em', e)) : [h('span.gm-core-em', '🎁')], `${kinds} ${plural(kinds, 'вещь', 'вещи', 'вещей')}` + (totalWords() ? ` · 📖 ${totalWords()} ${plural(totalWords(), 'слово', 'слова', 'слов')}` : '')),
+      mid(sampleI.length ? sampleI.map((it) => h('span.gm-core-em', itemPic(it))) : [h('span.gm-core-em', '🎁')], `${kinds} ${plural(kinds, 'вещь', 'вещи', 'вещей')}` + (totalWords() ? ` · 📖 ${totalWords()} ${plural(totalWords(), 'слово', 'слова', 'слов')}` : '')),
       row(GAMES[2], `Уровень ${Math.min(lvl, M3_MAX)} из ${M3_MAX} · вещи — фишки`),
       h('div.gm-core-mid', h('span.gm-core-arr', '↺'), h('span.gm-core-n', 'победа: редкая вещь-сюрприз и новые буквы')),
     ),

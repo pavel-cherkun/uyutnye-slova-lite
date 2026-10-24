@@ -10,6 +10,7 @@ import { loadDict } from './data/dict.js';
 import { setupDevice } from './ui/device.js';
 import { syncLetters } from './progression.js';
 import { hold } from './ui/fx.js';
+import { setDrawings } from './data/items.js';
 
 const app = document.getElementById('app');
 let hudEl, screenEl;
@@ -137,5 +138,6 @@ async function openGame(id) {
 
 setupDevice();
 syncLetters();
+setDrawings(state.drawings);
 app.replaceChildren(h('div.splash', h('div.splash-logo', h('span.ltr.ltr-big', 'А')), h('div.splash-text', 'Раскладываем буквы…')));
 loadDict().then(boot);

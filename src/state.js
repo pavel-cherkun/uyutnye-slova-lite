@@ -16,6 +16,7 @@ function defaultState() {
     dex: {},              // коллекция: id предмета → 1, если когда-либо был найден
     letters: { К: 1, О: 1, Т: 1 }, // первое слово — КОТ
     items: {},            // { 'ЯБЛОКО': 2, 'card:СЕКРЕТЕР': 1, 'ess:ЛЮБОВЬ': 1 }
+    drawings: {},         // { 'СЕКРЕТЕР': 'data:image/png…' } — нарисованные слова становятся вещами
     progress: {
       match3Level: 1,
       wordsMade: {},      // { 'СЛОВО': кол-во раз }
@@ -112,9 +113,10 @@ export function importSave(code) {
 // ---------- Предметы ----------
 export function itemCount(id) { return state.items[id] || 0; }
 /** Сколько вещей всего (для шапки) */
-export function totalItems() { return Object.entries(state.items).reduce((a, [id, n]) => a + (id.includes(':') ? 0 : n), 0); }
+const isDrawn = (id) => id.startsWith('card:') && !!state.drawings[id.slice(5)];
+export function totalItems() { return Object.entries(state.items).reduce((a, [id, n]) => a + (!id.includes(':') || isDrawn(id) ? n : 0), 0); }
 /** Сколько слов в «Словаре» (слова без своего эмодзи) */
-export function totalWords() { return Object.keys(state.items).filter((id) => id.startsWith('card:') && state.items[id] > 0).length; }
+export function totalWords() { return Object.keys(state.items).filter((id) => id.startsWith('card:') && state.items[id] > 0 && !isDrawn(id)).length; }
 
 // Новые для коллекции предметы из последних поступлений (для бейджа «НОВОЕ!» в окне наград)
 export let lastNew = [];

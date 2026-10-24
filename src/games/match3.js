@@ -3,7 +3,7 @@
 // Рендер (mount) только проигрывает «шаги», которые возвращает логика.
 
 import { itemsByCat, CATEGORIES, getItem, RARITY } from '../data/items.js';
-import { h, toast, modal, confetti, confirmDialog, shuffle } from '../ui/common.js';
+import { h, toast, modal, confetti, confirmDialog, shuffle, itemPic } from '../ui/common.js';
 import { floatText } from '../ui/fx.js';
 import { sfx, buzz } from '../ui/device.js';
 import { spellModal } from '../ui/spell.js';
@@ -768,7 +768,7 @@ function playLevel(root, ctx, chosen) {
       return;
     }
     gem.style.setProperty('--c', COLORS[type % COLORS.length][0]);
-    gem.append(h('span.m3-em', items[type].emoji));
+    gem.append(h('span.m3-em', itemPic(items[type])));
     if (special) {
       gem.classList.add('m3-' + special);
       gem.append(h('span.m3-badge', special === 'bomb' ? '✸' : special === 'rocketH' ? '⇆' : '⇅'));
@@ -839,7 +839,7 @@ function playLevel(root, ctx, chosen) {
     el._gem.style.animationDelay = (el._r * 30 + el._c * 15) + 'ms';
   }
   later(() => { for (const el of els.values()) { el.classList.remove('m3-born'); el._gem.style.animationDelay = ''; } }, 800);
-  later(() => banner(`Собери ${goals.map((g) => items[g.type].emoji).join(' ')}`, '', 1300), 350);
+  later(() => banner(`Собери ${goals.map((g) => (items[g.type].img ? items[g.type].word.toLowerCase() : items[g.type].emoji)).join(' ')}`, '', 1300), 350);
 
   // ---------- Эффекты ----------
   /** Центр клетки в координатах .m3-wrap (для надписей, которые не должны обрезаться полем) */
@@ -965,7 +965,7 @@ function playLevel(root, ctx, chosen) {
       const tx = gr.left + 22, ty = gr.top + gr.height / 2;
       cells.slice(0, maxFly).forEach((cl, i) => {
         const from = spos(cl.r, cl.c);
-        const f = h('div.m3-fly', { style: { left: from.x - 12 + 'px', top: from.y - 12 + 'px' } }, items[g.type].emoji);
+        const f = h('div.m3-fly', { style: { left: from.x - 12 + 'px', top: from.y - 12 + 'px' } }, itemPic(items[g.type]));
         document.body.append(f);
         later(() => {
           f.style.transform = `translate(${tx - from.x}px, ${ty - from.y}px) scale(.7)`;
@@ -1549,10 +1549,10 @@ export function mount(root, ctx) {
   function render() {
     selEl.replaceChildren(...Array.from({ length: MAXP }, (_, i) => {
       const id = picked[i];
-      return h('div.m3p-slot' + (id ? '.on' : ''), { style: { '--c': COLORS[i][0] } }, id ? getItem(id).emoji : '');
+      return h('div.m3p-slot' + (id ? '.on' : ''), { style: { '--c': COLORS[i][0] } }, id ? itemPic(getItem(id)) : '');
     }));
     const burn = picked.length >= MIN_PICK ? goalIds() : [];
-    burnEl.replaceChildren(...(burn.length ? [h('span', '🎯 Цели:'), ...burn.map((id) => h('span.m3p-be', getItem(id).emoji)), h('span.m3p-bs', 'собери — они сгорят, а взамен придёт редкая вещь 🎁')] : []));
+    burnEl.replaceChildren(...(burn.length ? [h('span', '🎯 Цели:'), ...burn.map((id) => h('span.m3p-be', itemPic(getItem(id)))), h('span.m3p-bs', 'собери — они сгорят, а взамен придёт редкая вещь 🎁')] : []));
     gridEl.replaceChildren(...cands.map(({ it, n }) => {
       const on = picked.includes(it.id);
       return h('button.m3p-it' + (on ? '.on' : ''), {
@@ -1563,7 +1563,7 @@ export function mount(root, ctx) {
           else { sfx('error'); toast(`На этом уровне максимум ${MAXP}`); }
           render();
         },
-      }, h('span.e', it.emoji), h('span.w', it.word.toLowerCase()), h('span.band'), h('span.n', n), on ? h('span.ok', '✓') : null);
+      }, h('span.e', itemPic(it)), h('span.w', it.word.toLowerCase()), h('span.band'), h('span.n', n), on ? h('span.ok', '✓') : null);
     }));
     go.disabled = picked.length < MIN_PICK;
     go.textContent = picked.length < MIN_PICK ? `Выбери ещё ${MIN_PICK - picked.length}` : 'Играть ▶';

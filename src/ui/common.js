@@ -54,10 +54,15 @@ export function modal(content, { onClose, dismissable = true } = {}) {
   return { el: box, close };
 }
 
+/** Картинка вещи: эмодзи или рисунок игрока (размер — как у эмодзи, от font-size) */
+export function itemPic(it) {
+  return it.img ? h('img.pic', { src: it.img, alt: it.word.toLowerCase(), draggable: 'false' }) : it.emoji;
+}
+
 export function itemChip(id, n) {
   const it = getItem(id);
   return h('div.chip', { style: { '--rar': RARITY[it.rarity].color } },
-    h('span.chip-emoji', it.emoji),
+    h('span.chip-emoji', itemPic(it)),
     h('span.chip-word', it.word.toLowerCase()),
     n > 1 ? h('span.chip-n', '×' + n) : null,
   );

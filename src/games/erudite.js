@@ -1,7 +1,8 @@
 // Эрудит: составляешь слова из букв в сумке. Слово превращается в предмет, карточку, эссенцию
 // или открывает комнату. Буквы тратятся.
 
-import { h, toast, confetti, pick, modal } from '../ui/common.js';
+import { h, toast, confetti, pick, modal, itemPic } from '../ui/common.js';
+import { drawWord } from '../ui/draw.js';
 import { classifyWord, getItem, ITEMS, CATEGORIES, RARITY, RARITY_ORDER, wordToItem } from '../data/items.js';
 import { dictReady, loadDict } from '../data/dict.js';
 import { CARD_WORDS, ESSENCE_WORDS } from '../data/words.js';
@@ -115,6 +116,8 @@ const CSS = `
 .er-newl .tile { background: var(--lime); color: var(--ink); border: 2.5px solid var(--ink); box-shadow: 0 4px 0 var(--ink); font-family: var(--display); font-weight: 800; border-radius: 10px; }
 .er-newl .tile:nth-child(odd) { transform: rotate(-4deg); } .er-newl .tile:nth-child(even) { transform: rotate(4deg); }
 .er-made { display: flex; gap: 6px; overflow-x: auto; padding: 4px 2px 6px; min-height: 40px; }
+.er-draw { border: 2.5px dashed var(--ink); font-family: inherit; color: var(--ink); animation: er-in .35s cubic-bezier(.3,1.8,.6,1), er-pulse 1.6s ease-in-out .4s infinite !important; }
+.er-draw-t { font-size: 10px; font-weight: 900; text-transform: uppercase; background: var(--lime); border-radius: 99px; padding: 1px 6px; margin-left: 4px; }
 .er-made .chip { flex: none; animation: er-in .35s cubic-bezier(.3,1.8,.6,1); background: #fff; }
 
 .er-place { margin-top: 6px; font-weight: 900; font-size: 13px; color: var(--ink); background: var(--yellow); border: 2px solid var(--ink); border-radius: 99px; padding: 3px 10px; display: inline-block; }
@@ -266,8 +269,8 @@ export function mount(root, ctx) {
         // что получится: само слово-вещь или вещь из его категории
         const it = getItem(wordToItem(w));
         rar = it.rarity;
-        if (it.tier === 1) previewEl.append(h('span', `${it.emoji} ${it.word.toLowerCase()}${TOOL_USE[it.id] ? ' · бустер' : ''}`), h('span.rar-tag.rar-' + it.rarity, RARITY[it.rarity].name));
-        else previewEl.append(h('span', '📖 в словарь'));
+        if (it.tier === 1) previewEl.append(h('span', itemPic(it), ` ${it.word.toLowerCase()}${TOOL_USE[it.id] ? ' · бустер' : ''}`), h('span.rar-tag.rar-' + it.rarity, RARITY[it.rarity].name));
+        else previewEl.append(h('span', '📖 в словарь · нарисуешь сама 🎨'));
       }
     }
     boardEl.classList.remove('rar-c', 'rar-r', 'rar-e', 'rar-l');
@@ -301,7 +304,13 @@ export function mount(root, ctx) {
 
     const ns = nextStage();
     nextEl.replaceChildren(...(ns ? ['🔒 ', ...[...ns.letters].map((ch) => h('span.tile', ch)), ' через ', h('b', String(Math.max(1, ns.need))), ` ${plural(Math.max(1, ns.need))}`] : []));
-    madeEl.replaceChildren(...made.map((m) => h('div.chip.rar-' + m.rar, h('span.chip-emoji', m.emoji), h('span.chip-word', m.word.toLowerCase()))));
+    // слово без картинки — чип «🎨 нарисуй»: по нажатию открывается холст
+    madeEl.replaceChildren(...made.map((m) => {
+      const it = getItem(m.id);
+      if (it.tier === 1) return h('div.chip.rar-' + m.rar, h('span.chip-emoji', itemPic(it)), h('span.chip-word', m.word.toLowerCase()));
+      return h('button.chip.er-draw.rar-' + m.rar, { onclick: () => drawWord(it.word, () => render()) },
+        h('span.chip-emoji', '🎨'), h('span.chip-word', m.word.toLowerCase()), h('span.er-draw-t', 'нарисуй'));
+    }));
   }
 
   // Слово взрывается в предмет: кольца цвета редкости, частицы, эмодзи
@@ -365,10 +374,10 @@ export function mount(root, ctx) {
 
     const gotId = wordToItem(w);
     store.addItem(gotId);
-    emoji = getItem(gotId).tier === 1 ? getItem(gotId).emoji : '📖';
+    emoji = getItem(gotId).tier === 1 ? itemPic(getItem(gotId)) : '📖';
     if (c.kind === 'item') confetti(innerWidth / 2, innerHeight / 3, 30);
     const rar = getItem(gotId).rarity;
-    made.unshift({ word: w, emoji, rar });
+    made.unshift({ word: w, id: gotId, rar });
     boardEl.querySelectorAll('.er-mini, .er-mini-t').forEach((e) => e.remove());
     explode(emoji, rar);
     sfx(rar === 'c' ? 'coin' : 'reward');
@@ -378,7 +387,7 @@ export function mount(root, ctx) {
       document.body.append(flash); later(() => flash.remove(), 1600);
       confetti(innerWidth / 2, innerHeight / 3, rar === 'l' ? 90 : 50);
     }
-    floatText(getItem(gotId).tier === 1 ? `${emoji} ${getItem(gotId).word.toLowerCase()}` : '📖 в словарь', innerWidth / 2, innerHeight * 0.35);
+    floatText(getItem(gotId).tier === 1 ? `${getItem(gotId).emoji} ${getItem(gotId).word.toLowerCase()}` : '📖 в словарь — нарисуй его!', innerWidth / 2, innerHeight * 0.35);
     word = [];
     topRank = -1; lastLen = 0;
     store.commit();

@@ -1,6 +1,7 @@
 // Инвентари: буквы (открываются из шапки и в Эрудите) и вещи (из шапки и в Три в ряд).
 
-import { h, modal } from '../ui/common.js';
+import { h, modal, itemPic } from '../ui/common.js';
+import { drawWord } from '../ui/draw.js';
 import { state } from '../state.js';
 import { getItem, CATEGORIES, RARITY } from '../data/items.js';
 import { ALPHABET, isLetterOpen } from '../data/letters.js';
@@ -32,17 +33,19 @@ export function itemsModal() {
     h('div.inv-gh', CATEGORIES[c].icon + ' ' + CATEGORIES[c].name),
     h('div.inv-igrid', ...byCat[c].sort((a, b) => getItem(a).word.localeCompare(getItem(b).word)).map((id) => {
       const it = getItem(id);
-      return h('div.inv-i', { style: { '--rar': RARITY[it.rarity].color } }, h('span.inv-e', it.emoji), h('span.inv-w', it.word.toLowerCase()), h('b', '×' + state.items[id]));
+      // свой рисунок можно перерисовать
+      const redraw = it.drawn ? () => { m.close(); drawWord(it.word, () => itemsModal()); } : null;
+      return h('div.inv-i' + (it.drawn ? '.drawn' : ''), { style: { '--rar': RARITY[it.rarity].color }, onclick: redraw }, h('span.inv-e', itemPic(it)), h('span.inv-w', it.word.toLowerCase()), h('b', '×' + state.items[id]));
     }))));
   // слова без своего эмодзи — в «Словаре»
-  const words = Object.keys(state.items).filter((id) => id.startsWith('card:') && state.items[id] > 0).map((id) => getItem(id))
+  const words = Object.keys(state.items).filter((id) => id.startsWith('card:') && state.items[id] > 0).map((id) => getItem(id)).filter((it) => !it.drawn)
     .sort((a, b) => b.word.length - a.word.length || a.word.localeCompare(b.word));
   m = modal([
     h('div.modal-title', 'Мои вещи'),
     h('div.inv-sub', ids.length ? 'Вещи делаются из слов в Эрудите и становятся фишками в Три в ряд.' : 'Пока пусто — собери слово в Эрудите.'),
     h('div.inv-list', ...groups),
-    words.length ? h('div.inv-g', h('div.inv-gh', `📖 Словарь · ${words.length}`), h('div.inv-sub', 'Слова без своей картинки. Собери слово в Блоках — оно получит звезду ★'),
-      h('div.inv-words', ...words.map((it) => h('span.inv-word.rar-' + it.rarity, { style: { '--rar': RARITY[it.rarity].color } }, it.word.toLowerCase() + (stars(it.word) ? ' ' + '★'.repeat(stars(it.word)) : ''))))) : null,
+    words.length ? h('div.inv-g', h('div.inv-gh', `📖 Словарь · ${words.length}`), h('div.inv-sub', 'Слова без картинки. Нажми на слово и нарисуй его — оно станет вещью 🎨'),
+      h('div.inv-words', ...words.map((it) => h('button.inv-word.rar-' + it.rarity, { style: { '--rar': RARITY[it.rarity].color }, onclick: () => { m.close(); drawWord(it.word, () => itemsModal()); } }, '🎨 ', it.word.toLowerCase() + (stars(it.word) ? ' ' + '★'.repeat(stars(it.word)) : ''))))) : null,
     h('button.btn', { onclick: () => m.close() }, 'Готово'),
   ]);
   m.el.classList.add('inv-box');
@@ -65,7 +68,8 @@ const CSS = `
 .inv-e { font-size: 28px; line-height: 1.1; }
 .inv-w { font-size: 10px; font-weight: 800; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .inv-words { display: flex; flex-wrap: wrap; gap: 6px; }
-.inv-word { background: #fff; border-radius: 99px; padding: 5px 11px; font-weight: 800; font-size: 13px; box-shadow: inset 0 0 0 2px var(--rar); }
+.inv-i.drawn { cursor: pointer; }
+.inv-word { border: 0; color: var(--ink); font-family: inherit; background: #fff; border-radius: 99px; padding: 5px 11px; font-weight: 800; font-size: 13px; box-shadow: inset 0 0 0 2px var(--rar); }
 .inv-i b { position: absolute; top: -4px; right: -2px; background: #111; color: #fff; border-radius: 99px; font-size: 10px; padding: 1px 5px; }
 `;
 document.head.append(Object.assign(document.createElement('style'), { textContent: CSS }));

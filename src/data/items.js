@@ -10,6 +10,7 @@ import { ALIASES } from './aliases.js';
 // place: куда можно поставить в квартире (floor — на пол/поверхность, wall — на стену)
 // use: что можно сделать (eat — съесть, wear — надеть, boost — бустер в мини-играх, collect — коллекция)
 export const CATEGORIES = {
+  drawn:      { name: 'Мои рисунки',   icon: '🎨', use: 'collect' },
   furniture:  { name: 'Мебель',        icon: '🛋️', place: 'floor' },
   light:      { name: 'Свет',          icon: '💡', place: 'floor' },
   walldecor:  { name: 'На стену',      icon: '🖼️', place: 'wall' },
@@ -541,11 +542,16 @@ export const ITEMS = TABLE.trim().split('\n').map((line) => {
 
 const BY_ID = Object.fromEntries(ITEMS.map((it) => [it.id, it]));
 
+// Рисунки игрока: слово без эмодзи, нарисованное пальцем, становится полноценной вещью (state.drawings)
+let DRAWN = {};
+export function setDrawings(map) { DRAWN = map || {}; }
+
 /** Описание предмета по id: работает для всех трёх ярусов. */
 export function getItem(id) {
   if (BY_ID[id]) return BY_ID[id];
   if (id.startsWith('card:')) {
     const word = id.slice(5);
+    if (DRAWN[word]) return { id, word, emoji: '🎨', img: DRAWN[word], cat: 'drawn', rarity: wordRarity(word), tier: 1, drawn: true };
     let cat = CARD_WORDS[word] || dictCat(word) || 'misc';
     if (!CATEGORIES[cat] || cat === 'essence') cat = 'misc';
     return { id, word, emoji: CATEGORIES[cat].icon, cat, rarity: wordRarity(word), tier: 2 };
