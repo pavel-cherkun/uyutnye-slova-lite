@@ -4,6 +4,7 @@
 
 import { itemsByCat, CATEGORIES, getItem, RARITY } from '../data/items.js';
 import { h, toast, modal, confetti, confirmDialog, shuffle, itemPic } from '../ui/common.js';
+import { hasAds, showRewarded } from '../platform.js';
 import { floatText } from '../ui/fx.js';
 import { sfx, buzz } from '../ui/device.js';
 import { spellModal } from '../ui/spell.js';
@@ -171,9 +172,18 @@ export class Board {
         r = e;
       }
     }
+    // квадраты 2×2 — тоже совпадение (из них получается самолётик)
+    for (let r = 0; r + 1 < S; r++) {
+      for (let c = 0; c + 1 < S; c++) {
+        const ty = this.mt(r, c);
+        if (ty >= 0 && this.mt(r, c + 1) === ty && this.mt(r + 1, c) === ty && this.mt(r + 1, c + 1) === ty) {
+          runs.push({ dir: 'sq', type: ty, cells: [[r, c], [r, c + 1], [r + 1, c], [r + 1, c + 1]] });
+        }
+      }
+    }
     if (!runs.length) return [];
 
-    // объединяем пересекающиеся линии (union-find)
+    // объединяем пересекающиеся линии и квадраты (union-find)
     const parent = runs.map((_, i) => i);
     const find = (i) => (parent[i] === i ? i : (parent[i] = find(parent[i])));
     const owner = new Map();
@@ -196,14 +206,17 @@ export class Board {
     for (const gruns of byRoot.values()) {
       const cellKeys = new Set();
       for (const run of gruns) for (const [r, c] of run.cells) cellKeys.add(key(r, c));
-      const longest = gruns.reduce((a, b) => (b.cells.length > a.cells.length ? b : a));
-      const maxLen = longest.cells.length;
+      const lines = gruns.filter((x) => x.dir !== 'sq');
+      const longest = (lines.length ? lines : gruns).reduce((a, b) => (b.cells.length > a.cells.length ? b : a));
+      const maxLen = lines.length ? longest.cells.length : 0;
       const hasH = gruns.some((x) => x.dir === 'h');
       const hasV = gruns.some((x) => x.dir === 'v');
+      const hasSq = gruns.some((x) => x.dir === 'sq');
       let special = null;
       if (maxLen >= 5) special = 'rainbow';
       else if (hasH && hasV) special = 'bomb';
       else if (maxLen === 4) special = longest.dir === 'h' ? 'rocketH' : 'rocketV';
+      else if (hasSq) special = 'plane';
 
       let pos = null;
       for (const k of cellKeys) if (swapKeys.has(k)) { pos = unkey(k); break; }
@@ -260,6 +273,11 @@ export class Board {
     } else if (tile.special === 'bomb') {
       for (let y = r - 1; y <= r + 1; y++) for (let x = c - 1; x <= c + 1; x++) if (this.get(y, x)) out.push([y, x]);
       effects.push({ kind: 'bomb', r, c, rad: 1 });
+    } else if (tile.special === 'plane') {
+      out.push([r, c]);
+      for (const [dy, dx] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) if (this.get(r + dy, c + dx)) out.push([r + dy, c + dx]);
+      const t = this.planeTarget(r, c);
+      if (t) { out.push(t); effects.push({ kind: 'plane', r, c, tr: t[0], tc: t[1] }); }
     } else if (tile.special === 'rainbow') {
       // радуга, задетая взрывом: забирает самый частый тип
       const cnt = Array(this.ntypes).fill(0);
@@ -269,6 +287,20 @@ export class Board {
       effects.push({ kind: 'rainbow', r, c });
     }
     return out;
+  }
+
+  /** Куда летит самолётик: игра может подсказать клетку цели (planeGoal), иначе случайная фишка подальше */
+  planeTarget(r, c) {
+    const S = this.size, pref = [], any = [];
+    for (let y = 0; y < S; y++) {
+      for (let x = 0; x < S; x++) {
+        if (Math.abs(y - r) + Math.abs(x - c) <= 1 || !this.grid[y][x]) continue;
+        any.push([y, x]);
+        if (this.planeGoal && this.planeGoal(this.grid[y][x].type)) pref.push([y, x]);
+      }
+    }
+    const pool = pref.length ? pref : any;
+    return pool.length ? pool[Math.floor(this.rng() * pool.length)] : null;
   }
 
   /**
@@ -552,7 +584,7 @@ const BOOSTERS = [
 ];
 const FX_MAX = 12; // одновременных частиц/вспышек на поле
 
-const SPECIAL_NAME = { rocketH: 'РАКЕТА!', rocketV: 'РАКЕТА!', bomb: 'БОМБА!', rainbow: 'РАДУГА!' };
+const SPECIAL_NAME = { rocketH: 'РАКЕТА!', rocketV: 'РАКЕТА!', bomb: 'БОМБА!', rainbow: 'РАДУГА!', plane: 'САМОЛЁТИК!' };
 // Надписи каскада: чем длиннее цепочка, тем крупнее и безумнее
 const COMBO = [
   null, null,
@@ -610,6 +642,7 @@ const CSS = `
 .m3-gem.m3-rainbow { overflow:hidden; background:#fff; }
 .m3-gem.m3-rainbow::before { content:''; position:absolute; inset:-35%; pointer-events:none;
   background:conic-gradient(from 30deg, var(--pink), var(--orange), var(--yellow), var(--lime), var(--blue), var(--violet), var(--pink)); }
+.m3-planefx { position:absolute; z-index:6; pointer-events:none; line-height:1; filter:drop-shadow(0 3px 0 rgba(17,17,17,.35)); }
 .m3-badge { position:absolute; right:-14%; bottom:-14%; z-index:2; font-size:.42em; background:var(--ink); color:var(--lime); border:1.5px solid var(--ink);
   border-radius:50%; width:1.6em; height:1.6em; display:flex; align-items:center; justify-content:center; font-weight:900; }
 .m3-tile.m3-pop .m3-gem { animation:m3-pop .28s ease-in forwards; }
@@ -714,6 +747,7 @@ function playLevel(root, ctx, chosen) {
   let openModal = null;
   let hintTimer = null;
   const goals = cfg.goals.map((g) => ({ ...g, left: g.need, el: null, num: null, closed: false }));
+  board.planeGoal = (type) => goals.some((g) => g.type === type && g.left > 0); // самолётик летит к фишкам цели
   const els = new Map(); // id тайла → элемент
   const timers = new Set();
 
@@ -771,7 +805,7 @@ function playLevel(root, ctx, chosen) {
     gem.append(h('span.m3-em', itemPic(items[type])));
     if (special) {
       gem.classList.add('m3-' + special);
-      gem.append(h('span.m3-badge', special === 'bomb' ? '✸' : special === 'rocketH' ? '⇆' : '⇅'));
+      gem.append(h('span.m3-badge', special === 'bomb' ? '✸' : special === 'plane' ? '✈' : special === 'rocketH' ? '⇆' : '⇅'));
     }
   }
 
@@ -920,6 +954,16 @@ function playLevel(root, ctx, chosen) {
       const ring = h('div.m3-ring.m3-mag', { style: { left: (e.c + 0.5) * cell - d / 2 + 'px', top: (e.r + 0.5) * cell - d / 2 + 'px', width: d + 'px', height: d + 'px' } });
       boardEl.append(ring); drop(ring, 550);
       shake(false);
+    } else if (e.kind === 'plane') {
+      const p = h('div.m3-planefx', { style: { left: (e.c + 0.5) * cell + 'px', top: (e.r + 0.5) * cell + 'px', fontSize: cell * 0.7 + 'px' } }, '✈️');
+      boardEl.append(p);
+      p.animate([
+        { transform: 'translate(-50%,-50%) scale(.6) rotate(-30deg)' },
+        { transform: `translate(calc(-50% + ${(e.tc - e.c) * cell * 0.5}px), calc(-50% + ${(e.tr - e.r) * cell * 0.5 - cell}px)) scale(1.3) rotate(10deg)`, offset: 0.5 },
+        { transform: `translate(calc(-50% + ${(e.tc - e.c) * cell}px), calc(-50% + ${(e.tr - e.r) * cell}px)) scale(.8)` },
+      ], { duration: 420, easing: 'ease-in-out', fill: 'forwards' });
+      drop(p, 480);
+      burst(e.tr, e.tc, 1.2);
     } else if (e.kind === 'bomb' || e.kind === 'rainbow') {
       const rad = e.kind === 'rainbow' ? 4 : (e.rad || 1) + 0.8;
       const d = cell * rad * 2;
@@ -1315,9 +1359,7 @@ function playLevel(root, ctx, chosen) {
     }
     const left = goals.filter((g) => g.left > 0).map((g) => h('div.m3-goal', gemEl(g.type), String(g.left)));
     let m = null;
-    const extraBtn = h('button.btn.btn-big', {
-      onclick: () => {
-        if (!spendCommonLetters(store, CONTINUE_COST)) { sfx('error'); toast('Не хватает букв — сыграй в Блоки'); return; }
+    const grant = () => {
         extraUsed = true;
         movesLeft += 5;
         ended = false;
@@ -1328,13 +1370,23 @@ function playLevel(root, ctx, chosen) {
         sfx('reward'); buzz([15, 30, 15]);
         busy = false;
         scheduleHint();
+    };
+    const extraBtn = h('button.btn.btn-big', {
+      onclick: () => {
+        if (!spendCommonLetters(store, CONTINUE_COST)) { sfx('error'); toast('Не хватает букв — сыграй в Блоки'); return; }
+        grant();
       },
     }, `+5 ходов за ${CONTINUE_COST} буквы`);
+    // на Яндекс Играх — те же +5 ходов за просмотр рекламы
+    const adBtn = hasAds() ? h('button.btn.btn-violet.btn-big', {
+      onclick: async () => { if (await showRewarded() && alive) grant(); },
+    }, '📺 +5 ходов за рекламу') : null;
     m = modal([
       h('div.modal-title', 'Ходы закончились'),
       h('div.m3-sub', 'Осталось совсем чуть-чуть:'),
       h('div.m3-lose-goals', left),
       extraBtn,
+      adBtn,
       h('button.btn.btn-ghost.btn-big', { onclick: () => { openModal = null; m.close(); finishLose(); } }, 'Завершить'),
     ], { dismissable: false });
     m.el.classList.add('m3-modal');
@@ -1527,7 +1579,7 @@ export function mount(root, ctx) {
     body.append(h('div.m3p-empty',
       h('div', { style: { fontSize: '54px' } }, '🎁'),
       h('b', `Нужно хотя бы ${MIN_PICK} разных вещи`),
-      h('div.small.muted', `У тебя ${cands.length}. Вещи получаются из слов в Эрудите.`),
+      h('div.small.muted', `У тебя ${cands.length}. Вещи получаются из слов в «Составь слово».`),
       h('button.btn.btn-big', { onclick: () => ctx.exit() }, 'Понятно'),
     ));
     return () => { root.classList.remove('m3p-root'); };

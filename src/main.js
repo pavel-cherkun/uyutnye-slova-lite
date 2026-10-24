@@ -3,7 +3,7 @@
 import * as store from './state.js';
 import { state, subscribe, totalLetters, totalItems } from './state.js';
 import { h, toast, showReward, modal } from './ui/common.js';
-import { renderGames, GAMES, gameIcon, flowNodes } from './screens/games.js';
+import { renderGames, GAMES, gameIcon, flowNodes, maybeWelcome } from './screens/games.js';
 import { lettersModal, itemsModal } from './screens/inventory.js';
 import { openSettings, maybeIosHint } from './screens/settings.js';
 import { loadDict } from './data/dict.js';
@@ -11,6 +11,7 @@ import { setupDevice } from './ui/device.js';
 import { syncLetters } from './progression.js';
 import { hold } from './ui/fx.js';
 import { setDrawings } from './data/items.js';
+import { initPlatform, gameReady, cloudLoad, cloudSave, enterGame, leaveGame, showInterstitial } from './platform.js';
 
 const app = document.getElementById('app');
 let hudEl, screenEl;
@@ -24,6 +25,7 @@ function boot() {
   renderHud();
   refresh();
   setTimeout(maybeIosHint, 600);
+  setTimeout(() => maybeWelcome(nav), 300);
 }
 
 // Шапка строится один раз, дальше меняются только числа (иначе кнопки пересоздаются под пальцем)
@@ -112,6 +114,7 @@ async function openGame(id) {
     try { cleanup && cleanup(); } catch (e) { console.error(e); }
     layer.remove();
     gameOpen = false;
+    leaveGame();
     renderHud();
     refresh();
   };
@@ -120,15 +123,16 @@ async function openGame(id) {
     finish(reward = {}, title = 'Награда') {
       (state.stats.plays ||= {})[id] = (state.stats.plays[id] || 0) + 1;
       store.applyReward(reward);
-      close();
-      showReward(title, reward);
       store.commit();
-      hold(false);
+      close();
+      // реклама — в логической паузе, сразу после действия игрока; награда — после неё
+      showInterstitial().then(() => { showReward(title, reward); hold(false); });
     },
-    exit: () => { close(); hold(false); },
+    exit: () => { close(); hold(false); showInterstitial(); },
   };
   try {
     cleanup = mod.mount(layer, ctx);
+    enterGame();
   } catch (e) {
     console.error(e);
     toast('Ошибка в игре: ' + e.message);
@@ -136,8 +140,15 @@ async function openGame(id) {
   }
 }
 
-setupDevice();
-syncLetters();
-setDrawings(state.drawings);
 app.replaceChildren(h('div.splash', h('div.splash-logo', h('span.ltr.ltr-big', 'А')), h('div.splash-text', 'Раскладываем буквы…')));
-loadDict().then(boot);
+(async () => {
+  await initPlatform();
+  store.adoptSave(await cloudLoad()); // облако новее — играем с него (другое устройство)
+  store.onSaved(cloudSave);
+  setupDevice();
+  syncLetters();
+  setDrawings(state.drawings);
+  await loadDict();
+  boot();
+  gameReady();
+})();

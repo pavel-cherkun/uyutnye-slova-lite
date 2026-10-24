@@ -42,7 +42,7 @@ export function itemsModal() {
     .sort((a, b) => b.word.length - a.word.length || a.word.localeCompare(b.word));
   m = modal([
     h('div.modal-title', 'Мои вещи'),
-    h('div.inv-sub', ids.length ? 'Вещи делаются из слов в Эрудите и становятся фишками в Три в ряд.' : 'Пока пусто — собери слово в Эрудите.'),
+    h('div.inv-sub', ids.length ? 'Вещи делаются из слов в «Составь слово» и становятся фишками в Три в ряд.' : 'Пока пусто — составь слово из букв.'),
     h('div.inv-list', ...groups),
     words.length ? h('div.inv-g', h('div.inv-gh', `📖 Словарь · ${words.length}`), h('div.inv-sub', 'Слова без картинки. Нажми на слово и нарисуй его — оно станет вещью 🎨'),
       h('div.inv-words', ...words.map((it) => h('button.inv-word.rar-' + it.rarity, { style: { '--rar': RARITY[it.rarity].color }, onclick: () => { m.close(); drawWord(it.word, () => itemsModal()); } }, '🎨 ', it.word.toLowerCase() + (stars(it.word) ? ' ' + '★'.repeat(stars(it.word)) : ''))))) : null,

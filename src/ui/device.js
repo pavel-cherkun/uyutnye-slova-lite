@@ -1,6 +1,7 @@
 // Всё, что касается телефона: полный экран, установка на экран «Домой», звуки, вибрация, кнопка «Назад».
 
 import { state } from '../state.js';
+import { isYandex, onPause } from '../platform.js';
 
 const root = document.documentElement;
 const ua = navigator.userAgent;
@@ -34,7 +35,7 @@ export function exitFullscreen() {
 // прямо во время нажатия, и тап теряется.
 let fsTried = false;
 function autoFullscreen() {
-  if (fsTried || !state.settings.fullscreen || !state.created || isStandalone() || isFullscreen()) return;
+  if (isYandex() || fsTried || !state.settings.fullscreen || !state.created || isStandalone() || isFullscreen()) return;
   fsTried = true;
   enterFullscreen();
 }
@@ -55,9 +56,16 @@ export async function install() {
 let ctx = null;
 function audio() {
   if (!ctx) { try { ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch { return null; } }
-  if (ctx.state === 'suspended') ctx.resume();
+  if (ctx.state === 'suspended' && !muted) ctx.resume();
   return ctx;
 }
+// реклама, свёрнутая вкладка: звук молчит
+let muted = false;
+onPause((p) => {
+  muted = p;
+  if (!ctx) return;
+  try { p ? ctx.suspend() : ctx.resume(); } catch { /* ок */ }
+});
 
 function tone(freq, start, dur, { type = 'sine', vol = 0.12, slide = 0 } = {}) {
   const a = audio();
@@ -91,7 +99,7 @@ const SOUNDS = {
 };
 
 export function sfx(name) {
-  if (!state.settings.sound) return;
+  if (!state.settings.sound || muted) return;
   try { SOUNDS[name]?.(); } catch { /* без звука */ }
 }
 
@@ -117,9 +125,12 @@ function setupBack() {
 export function setupDevice() {
   // первый тап: звук «проснётся», полный экран включится
   document.addEventListener('pointerup', () => { audio(); autoFullscreen(); }, { capture: true });
+  // без контекстного меню и выделения по долгому тапу
+  document.addEventListener('contextmenu', (e) => e.preventDefault());
   // звук и лёгкая вибрация на любую кнопку
   document.addEventListener('click', (e) => {
     if (e.target.closest('button:not(:disabled)')) { sfx('tap'); buzz(5); }
   }, { capture: true });
-  setupBack();
+  // в iframe Яндекс Игр историю браузера не трогаем
+  if (!isYandex()) setupBack();
 }

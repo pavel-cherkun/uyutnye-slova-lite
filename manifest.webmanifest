@@ -1,6 +1,6 @@
 {
-  "name": "Уютные слова",
-  "short_name": "Уютные слова",
+  "name": "Добывай буквы: собирай слова",
+  "short_name": "Добывай буквы",
   "start_url": "./",
   "scope": "./",
   "display": "fullscreen",

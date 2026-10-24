@@ -74,6 +74,23 @@ export function saveNow() {
     localStorage.setItem(SAVE_KEY, json);
     if (state.savedAt - lastBackup > 30000) { localStorage.setItem(BACKUP_KEY, json); lastBackup = state.savedAt; }
   } catch (e) { console.warn('Не удалось сохранить', e); }
+  for (const fn of saveHooks) fn(state);
+}
+
+const saveHooks = new Set();
+/** Вызывается после каждого сохранения (облако платформы) */
+export function onSaved(fn) { saveHooks.add(fn); }
+
+/** Подменить состояние сохранением из облака, если оно новее локального. Рисунки объединяются. */
+export function adoptSave(data) {
+  if (!data || typeof data !== 'object' || !data.items || (data.savedAt || 0) <= (state.savedAt || 0)) return false;
+  const next = migrate(data);
+  next.drawings = { ...(state.drawings || {}), ...(next.drawings || {}) };
+  for (const k of Object.keys(state)) delete state[k];
+  Object.assign(state, next);
+  dirty = true;
+  saveNow();
+  return true;
 }
 
 export function commit() {

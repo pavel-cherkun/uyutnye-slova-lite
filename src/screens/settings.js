@@ -2,6 +2,7 @@
 
 import { h, toast, modal, confirmDialog } from '../ui/common.js';
 import { state, commit, resetSave } from '../state.js';
+import { isYandex } from '../platform.js';
 import {
   isIOS, isStandalone, canFullscreen, enterFullscreen, exitFullscreen, canInstall, install,
 } from '../ui/device.js';
@@ -15,6 +16,7 @@ function toggle(label, key, onChange) {
 
 export function settingsCard(rerender) {
   const standalone = isStandalone();
+  if (isYandex()) return h('div.card.stack', h('b', '⚙️ Настройки'), toggle('Звуки', 'sound', rerender), toggle('Вибрация', 'vibro', rerender));
   return h('div.card.stack',
     h('b', '⚙️ Настройки'),
     standalone
@@ -45,7 +47,7 @@ function installBlock() {
 
 /** Одноразовая подсказка про установку на iPhone (там полноэкранного режима в браузере нет) */
 export function maybeIosHint() {
-  if (!isIOS || canFullscreen || isStandalone() || state.progress.iosHintShown) return;
+  if (isYandex() || !isIOS || canFullscreen || isStandalone() || state.progress.iosHintShown) return;
   state.progress.iosHintShown = true;
   commit();
   const m = modal([

@@ -3,6 +3,7 @@
 
 import { h, toast, confetti, pick, modal, itemPic } from '../ui/common.js';
 import { drawWord } from '../ui/draw.js';
+import { isShowable } from '../data/stoplist.js';
 import { classifyWord, getItem, ITEMS, CATEGORIES, RARITY, RARITY_ORDER, wordToItem } from '../data/items.js';
 import { dictReady, loadDict } from '../data/dict.js';
 import { CARD_WORDS, ESSENCE_WORDS } from '../data/words.js';
@@ -25,7 +26,7 @@ function todayWords(state) {
 }
 
 export const meta = {
-  id: 'erudite', title: 'Эрудит', emoji: '✍️',
+  id: 'erudite', title: 'Составь слово', emoji: '✍️',
   desc: 'Составляй слова из своих букв', cost: { energy: 0 }, gives: 'предметы, комнаты',
 };
 
@@ -185,7 +186,7 @@ export function mount(root, ctx) {
     h('style', CSS),
     h('div.game-top',
       h('button.btn-icon', { onclick: () => ctx.exit() }, '✕'),
-      h('div.er-title', '✍️ Эрудит'),
+      h('div.er-title', '✍️ Составь слово'),
       streakEl,
       h('button.btn.btn-sm', { onclick: lettersModal }, 'Мои буквы'),
       h('button.btn.btn-sm.er-hint', { onclick: hint }, '💡'),
@@ -414,7 +415,7 @@ export function mount(root, ctx) {
       for (const ch of w) { used[ch] = (used[ch] || 0) + 1; if (used[ch] > (have[ch] || 0)) return false; }
       return true;
     };
-    const can = allWords().filter((w) => w.length >= 3 && fits(w));
+    const can = allWords().filter((w) => w.length >= 3 && isShowable(w) && fits(w));
     if (!can.length) return { none: 'letters' };
     // сначала комнаты, потом предметы, карточки, эссенции, «разное»; среди них — новые слова
     const scored = can.map((w) => {

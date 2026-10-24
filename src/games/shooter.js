@@ -2,6 +2,7 @@
 
 import { randomLetter } from '../data/letters.js';
 import { ITEMS } from '../data/items.js';
+import { onPause, hasAds, showRewarded } from '../platform.js';
 import { h, modal, shuffle, confetti } from '../ui/common.js';
 import { sfx, buzz } from '../ui/device.js';
 
@@ -809,13 +810,15 @@ export function mount(root, ctx) {
 
   // --- Цикл ---
   let raf = 0;
+  let platformPaused = false; // реклама или свёрнутая вкладка
+  const offPause = onPause((p) => { platformPaused = p; last = performance.now(); });
   let last = performance.now();
 
   function frame(now) {
     raf = requestAnimationFrame(frame);
     const dt = Math.min(1 / 30, (now - last) / 1000);
     last = now;
-    if (!S.paused) update(dt);
+    if (!S.paused && !platformPaused) update(dt);
     draw();
   }
 
@@ -1235,6 +1238,14 @@ export function mount(root, ctx) {
     sfx('error');
     const isRecord = S.turn > best0;
     const takeBtn = h('button.btn.btn-big.sh-take', { onclick: () => finish('Собрано!') }, 'Забрать');
+    // на Яндекс Играх: удвоить буквы партии за просмотр рекламы
+    const doubleBtn = hasAds() && collected.length ? h('button.btn.btn-violet.btn-big', {
+      onclick: async () => {
+        if (!(await showRewarded()) || S.finished) return;
+        collected.push(...collected);
+        finish('Буквы ×2!');
+      },
+    }, `📺 ×2 буквы за рекламу`) : null;
     const sorted = [...collected].sort();
     const box = h('div.sh-over-box',
       h('div.sh-over-title', 'Блоки дошли до низа'),
@@ -1249,6 +1260,7 @@ export function mount(root, ctx) {
         : h('p.sh-none', 'В этот раз без букв'),
       T.word ? h('div.sh-sub', T.done ? `Слово ${T.word} собрано ★` : `Слово ${T.word}: ${T.found.filter(Boolean).length} из ${T.word.length} — попробуй ещё`) : null,
       gainEl(),
+      doubleBtn,
       takeBtn,
     );
     wrap.append(h('div.sh-over', box));
@@ -1262,6 +1274,7 @@ export function mount(root, ctx) {
   return () => {
     S.finished = true;
     cancelAnimationFrame(raf);
+    offPause();
     ro.disconnect();
     canvas.removeEventListener('pointerdown', onDown);
     canvas.removeEventListener('pointermove', onMove);
